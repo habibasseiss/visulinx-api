@@ -4,13 +4,13 @@ from fast_zero.models import Todo, User
 
 
 def test_create_user(session):
-    new_user = User(username='alice', password='secret', email='teste@test')
+    new_user = User(password='secret', email='teste@test.com')
     session.add(new_user)
     session.commit()
 
-    user = session.scalar(select(User).where(User.username == 'alice'))
+    user = session.scalar(select(User).where(User.email == 'teste@test.com'))
 
-    assert user.username == 'alice'
+    assert user.email == 'teste@test.com'
 
 
 def test_create_todo(session, user: User):

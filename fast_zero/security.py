@@ -55,18 +55,16 @@ async def get_current_user(
         payload = decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
-        username: str = payload.get('sub')
-        if not username:
+        email: str = payload.get('sub')
+        if not email:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_data = TokenData(email=email)
     except DecodeError:
         raise credentials_exception
     except ExpiredSignatureError:
         raise credentials_exception
 
-    user = session.scalar(
-        select(User).where(User.email == token_data.username)
-    )
+    user = session.scalar(select(User).where(User.email == token_data.email))
 
     if user is None:
         raise credentials_exception

@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from enum import Enum
 
@@ -19,14 +20,14 @@ class TodoState(str, Enum):
 class User:
     __tablename__ = 'users'
 
-    id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    username: Mapped[str] = mapped_column(unique=True)
-    password: Mapped[str]
+    id: Mapped[uuid.UUID] = mapped_column(
+        init=False, primary_key=True, default_factory=uuid.uuid4
+    )
     email: Mapped[str] = mapped_column(unique=True)
+    password: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )
-
     todos: Mapped[list['Todo']] = relationship(
         init=False, back_populates='user', cascade='all, delete-orphan'
     )
@@ -36,11 +37,13 @@ class User:
 class Todo:
     __tablename__ = 'todos'
 
-    id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    title: Mapped[str]
-    description: Mapped[str]
-    state: Mapped[TodoState]
+    id: Mapped[uuid.UUID] = mapped_column(
+        init=False, primary_key=True, default_factory=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(init=True)
+    description: Mapped[str] = mapped_column(init=True)
+    state: Mapped[TodoState] = mapped_column(init=True)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), init=True)
 
     user: Mapped[User] = relationship(init=False, back_populates='todos')

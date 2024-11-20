@@ -1,3 +1,4 @@
+import uuid
 from http import HTTPStatus
 
 from fast_zero.models import TodoState
@@ -14,12 +15,15 @@ def test_create_todo(client, token):
             'state': 'draft',
         },
     )
-    assert response.json() == {
-        'id': 1,
+    expected_data = {
         'title': 'Test todo',
         'description': 'Test todo description',
         'state': 'draft',
     }
+
+    assert {
+        key: response.json()[key] for key in expected_data
+    } == expected_data
 
 
 def test_list_todos_should_return_5_todos(session, client, user, token):
@@ -136,7 +140,7 @@ def test_list_todos_filter_combined_should_return_5_todos(
 
 def test_patch_todo_error(client, token):
     response = client.patch(
-        '/todos/10',
+        f'/todos/{uuid.uuid4()}',
         json={},
         headers={'Authorization': f'Bearer {token}'},
     )
@@ -177,7 +181,7 @@ def test_delete_todo(session, client, user, token):
 
 def test_delete_todo_error(client, token):
     response = client.delete(
-        f'/todos/{10}', headers={'Authorization': f'Bearer {token}'}
+        f'/todos/{uuid.uuid4()}', headers={'Authorization': f'Bearer {token}'}
     )
 
     assert response.status_code == HTTPStatus.NOT_FOUND

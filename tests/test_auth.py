@@ -29,7 +29,6 @@ def test_token_expired_after_time(client, user):
             f'/users/{user.id}',
             headers={'Authorization': f'Bearer {token}'},
             json={
-                'username': 'wrongwrong',
                 'email': 'wrong@wrong.com',
                 'password': 'wrong',
             },

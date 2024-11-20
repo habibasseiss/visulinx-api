@@ -8,9 +8,8 @@ class UserFactory(factory.Factory):
     class Meta:
         model = User
 
-    username = factory.Sequence(lambda n: f'test{n}')
-    email = factory.LazyAttribute(lambda obj: f'{obj.username}@test.com')
-    password = factory.LazyAttribute(lambda obj: f'{obj.username}@example.com')
+    email = factory.Sequence(lambda n: f'test{n}@test.com')
+    password = factory.Sequence(lambda n: f'test{n}@test.com')
 
 
 class TodoFactory(factory.Factory):
@@ -20,4 +19,4 @@ class TodoFactory(factory.Factory):
     title = factory.Faker('text')
     description = factory.Faker('text')
     state = factory.fuzzy.FuzzyChoice(TodoState)
-    user_id = 1
+    user_id = factory.Faker('uuid4')

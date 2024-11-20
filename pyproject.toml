@@ -18,6 +18,7 @@ pyjwt = "^2.8.0"
 psycopg = {extras = ["binary"], version = "^3.1.19"}
 pwdlib = {extras = ["argon2"], version = "^0.2.0"}
 testcontainers = "^4.5.1"
+psycopg2-binary = "^2.9.10"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.1"
@@ -47,7 +48,7 @@ addopts = '-p no:warnings'
 [tool.taskipy.tasks]
 lint = 'ruff check .; ruff check . --diff'
 format = 'ruff check . --fix; ruff format .'
-run = 'fastapi dev fast_zero/app.py'
+dev = 'fastapi dev fast_zero/app.py'
 pre_test = 'task lint'
 test = 'pytest -s -x --cov=fast_zero -vv'
 post_test = 'coverage html'

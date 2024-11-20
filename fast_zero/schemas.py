@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 from fast_zero.models import TodoState
@@ -8,14 +10,12 @@ class Message(BaseModel):
 
 
 class UserSchema(BaseModel):
-    username: str
     email: EmailStr
     password: str
 
 
 class UserPublic(BaseModel):
-    id: int
-    username: str
+    id: UUID
     email: EmailStr
     model_config = ConfigDict(from_attributes=True)
 
@@ -30,7 +30,7 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    username: str | None = None
+    email: EmailStr | None = None
 
 
 class TodoSchema(BaseModel):
@@ -40,7 +40,7 @@ class TodoSchema(BaseModel):
 
 
 class TodoPublic(BaseModel):
-    id: int
+    id: UUID
     title: str
     description: str
     state: TodoState

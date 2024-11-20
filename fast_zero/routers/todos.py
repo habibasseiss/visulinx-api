@@ -1,5 +1,6 @@
 from http import HTTPStatus
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -18,7 +19,7 @@ from fast_zero.security import get_current_user
 
 router = APIRouter()
 
-Session = Annotated[Session, Depends(get_session)]
+DbSession = Annotated[Session, Depends(get_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 router = APIRouter(prefix='/todos', tags=['todos'])
@@ -28,9 +29,9 @@ router = APIRouter(prefix='/todos', tags=['todos'])
 def create_todo(
     todo: TodoSchema,
     user: CurrentUser,
-    session: Session,
+    session: DbSession,
 ):
-    db_todo: Todo = Todo(
+    db_todo: Todo = Todo(  # type: ignore
         title=todo.title,
         description=todo.description,
         state=todo.state,
@@ -45,7 +46,7 @@ def create_todo(
 
 @router.get('/', response_model=TodoList)
 def list_todos(  # noqa
-    session: Session,
+    session: DbSession,
     user: CurrentUser,
     title: str = Query(None),
     description: str = Query(None),
@@ -71,7 +72,7 @@ def list_todos(  # noqa
 
 @router.patch('/{todo_id}', response_model=TodoPublic)
 def patch_todo(
-    todo_id: int, session: Session, user: CurrentUser, todo: TodoUpdate
+    todo_id: UUID, session: DbSession, user: CurrentUser, todo: TodoUpdate
 ):
     db_todo = session.scalar(
         select(Todo).where(Todo.user_id == user.id, Todo.id == todo_id)
@@ -93,7 +94,7 @@ def patch_todo(
 
 
 @router.delete('/{todo_id}', response_model=Message)
-def delete_todo(todo_id: int, session: Session, user: CurrentUser):
+def delete_todo(todo_id: UUID, session: DbSession, user: CurrentUser):
     todo = session.scalar(
         select(Todo).where(Todo.user_id == user.id, Todo.id == todo_id)
     )
