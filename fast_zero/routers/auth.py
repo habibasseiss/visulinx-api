@@ -18,11 +18,11 @@ from fast_zero.security import (
 router = APIRouter(prefix='/auth', tags=['auth'])
 
 OAuth2Form = Annotated[OAuth2PasswordRequestForm, Depends()]
-Session = Annotated[Session, Depends(get_session)]
+DbSession = Annotated[Session, Depends(get_session)]
 
 
 @router.post('/token', response_model=Token)
-def login_for_access_token(form_data: OAuth2Form, session: Session):
+def login_for_access_token(form_data: OAuth2Form, session: DbSession):
     user = session.scalar(select(User).where(User.email == form_data.username))
 
     if not user:

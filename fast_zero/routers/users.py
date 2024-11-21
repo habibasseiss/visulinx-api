@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fast_zero.database import get_session
-from fast_zero.models import User
+from fast_zero.models import Organization, User
 from fast_zero.schemas import Message, UserList, UserPublic, UserSchema
 from fast_zero.security import (
     get_current_user,
@@ -32,11 +32,16 @@ def create_user(user: UserSchema, session: DbSession):
                 detail='Email already exists',
             )
 
+    organization = Organization(  # type: ignore
+        name='default',
+    )
+
     hashed_password = get_password_hash(user.password)
 
     db_user = User(  # type: ignore
         email=user.email,
         password=hashed_password,
+        organizations=[organization],
     )
 
     session.add(db_user)

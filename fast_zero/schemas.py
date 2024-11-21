@@ -54,3 +54,17 @@ class TodoUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     state: TodoState | None = None
+
+
+class OrganizationSchema(BaseModel):
+    name: str
+
+
+class OrganizationPublic(BaseModel):
+    id: UUID
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrganizationList(BaseModel):
+    organizations: list[OrganizationPublic]

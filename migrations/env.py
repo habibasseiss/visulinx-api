@@ -9,7 +9,7 @@ from fast_zero.models import table_registry
 from fast_zero.settings import Settings
 
 config = context.config
-config.set_main_option('sqlalchemy.url', Settings().DATABASE_URL)
+config.set_main_option('sqlalchemy.url', Settings().get_database_url())
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

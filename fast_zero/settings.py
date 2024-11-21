@@ -10,3 +10,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
+
+    def get_database_url(self) -> str:
+        url = self.DATABASE_URL
+        if 'postgres://' in url:
+            url = url.replace('postgres://', 'postgresql://')
+        return url
