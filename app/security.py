@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from http import HTTPStatus
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
@@ -8,12 +9,11 @@ from jwt import DecodeError, ExpiredSignatureError, decode, encode
 from pwdlib import PasswordHash
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from zoneinfo import ZoneInfo
 
-from fast_zero.database import get_session
-from fast_zero.models import User
-from fast_zero.schemas import TokenData
-from fast_zero.settings import Settings
+from app.database import get_session
+from app.models import User
+from app.schemas import TokenData
+from app.settings import Settings
 
 settings = Settings()
 pwd_context = PasswordHash.recommended()

@@ -1,6 +1,6 @@
 from http import HTTPStatus
 
-from fast_zero.models import User
+from app.models import User
 
 
 def test_create_user(client):

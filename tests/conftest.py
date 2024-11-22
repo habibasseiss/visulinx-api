@@ -4,10 +4,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
 
-from fast_zero.app import app
-from fast_zero.database import get_session
-from fast_zero.models import table_registry
-from fast_zero.security import get_password_hash
+from app.api import api
+from app.database import get_session
+from app.models import table_registry
+from app.security import get_password_hash
 from tests.factories import UserFactory
 
 
@@ -20,19 +20,19 @@ def engine():
             yield _engine
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(session):
     def get_session_override():
         return session
 
-    with TestClient(app) as client:
-        app.dependency_overrides[get_session] = get_session_override
+    with TestClient(api) as client:
+        api.dependency_overrides[get_session] = get_session_override
         yield client
 
-    app.dependency_overrides.clear()
+    api.dependency_overrides.clear()
 
 
-@pytest.fixture()
+@pytest.fixture
 def session(engine):
     table_registry.metadata.create_all(engine)
 
@@ -43,7 +43,7 @@ def session(engine):
     table_registry.metadata.drop_all(engine)
 
 
-@pytest.fixture()
+@pytest.fixture
 def user(session):
     password = 'testtest'
     user = UserFactory(password=get_password_hash(password))
@@ -57,7 +57,7 @@ def user(session):
     return user
 
 
-@pytest.fixture()
+@pytest.fixture
 def other_user(session):
     password = 'testtest'
     user = UserFactory(password=get_password_hash(password))
@@ -71,7 +71,7 @@ def other_user(session):
     return user
 
 
-@pytest.fixture()
+@pytest.fixture
 def token(client, user):
     response = client.post(
         '/auth/token',

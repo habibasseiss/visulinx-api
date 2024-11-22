@@ -2,7 +2,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
-from fast_zero.models import TodoState
+from app.models import TodoState
 
 
 class Message(BaseModel):

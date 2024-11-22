@@ -1,7 +1,7 @@
 import uuid
 from http import HTTPStatus
 
-from fast_zero.models import TodoState
+from app.models import TodoState
 from tests.factories import TodoFactory
 
 

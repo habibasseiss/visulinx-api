@@ -6,16 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fast_zero.database import get_session
-from fast_zero.models import Todo, User
-from fast_zero.schemas import (
+from app.database import get_session
+from app.models import Todo, User
+from app.schemas import (
     Message,
     TodoList,
     TodoPublic,
     TodoSchema,
     TodoUpdate,
 )
-from fast_zero.security import get_current_user
+from app.security import get_current_user
 
 router = APIRouter()
 

@@ -1,7 +1,7 @@
 import factory
 import factory.fuzzy
 
-from fast_zero.models import Todo, TodoState, User
+from app.models import Todo, TodoState, User
 
 
 class UserFactory(factory.Factory):
