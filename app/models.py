@@ -117,5 +117,6 @@ class Project:
 
     # Many-to-one relationship
     organization: Mapped[Organization] = relationship(
-        'Organization', back_populates='projects'
+        'Organization',
+        back_populates='projects',
     )

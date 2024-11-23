@@ -2,7 +2,7 @@ from http import HTTPStatus
 
 from fastapi import FastAPI
 
-from app.routers import auth, todos, users
+from app.routers import auth, organizations, todos, users
 from app.schemas import Message
 
 api = FastAPI()
@@ -10,6 +10,7 @@ api = FastAPI()
 api.include_router(users.router)
 api.include_router(auth.router)
 api.include_router(todos.router)
+api.include_router(organizations.router)
 
 
 @api.get('/', status_code=HTTPStatus.OK, response_model=Message)

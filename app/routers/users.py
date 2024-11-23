@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_session
 from app.models import Organization, User
@@ -53,7 +53,16 @@ def create_user(user: UserSchema, session: DbSession):
 
 @router.get('/', response_model=UserList)
 def read_users(session: DbSession, skip: int = 0, limit: int = 100):
-    users = session.scalars(select(User).offset(skip).limit(limit)).all()
+    users = (
+        session.scalars(
+            select(User)
+            .options(joinedload(User.organizations))
+            .offset(skip)
+            .limit(limit)
+        )
+        .unique()
+        .all()
+    )
     return {'users': users}
 
 

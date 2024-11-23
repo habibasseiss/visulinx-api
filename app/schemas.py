@@ -9,6 +9,20 @@ class Message(BaseModel):
     message: str
 
 
+class OrganizationSchema(BaseModel):
+    name: str
+
+
+class OrganizationPublic(BaseModel):
+    id: UUID
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrganizationList(BaseModel):
+    organizations: list[OrganizationPublic]
+
+
 class UserSchema(BaseModel):
     email: EmailStr
     password: str
@@ -17,6 +31,7 @@ class UserSchema(BaseModel):
 class UserPublic(BaseModel):
     id: UUID
     email: EmailStr
+    organizations: list[OrganizationPublic]
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -56,15 +71,18 @@ class TodoUpdate(BaseModel):
     state: TodoState | None = None
 
 
-class OrganizationSchema(BaseModel):
+class ProjectSchema(BaseModel):
     name: str
+    description: str
 
 
-class OrganizationPublic(BaseModel):
+class ProjectPublic(BaseModel):
     id: UUID
     name: str
+    description: str
+    organization_id: UUID
     model_config = ConfigDict(from_attributes=True)
 
 
-class OrganizationList(BaseModel):
-    organizations: list[OrganizationPublic]
+class ProjectList(BaseModel):
+    projects: list[ProjectPublic]
