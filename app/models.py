@@ -52,6 +52,7 @@ class User:
         'Organization',
         secondary=organization_user_association,
         back_populates='users',
+        default_factory=list,
     )
 
 
