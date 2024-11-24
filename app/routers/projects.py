@@ -1,8 +1,12 @@
+import mimetypes
 from http import HTTPStatus
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+import magic
+from boto3 import client
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
+from mypy_boto3_s3.client import S3Client
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,6 +14,10 @@ from app.database import get_session
 from app.models import Organization, Project, User
 from app.schemas import ProjectList, ProjectPublic, ProjectSchema
 from app.security import get_current_user
+from app.settings import Settings
+
+settings = Settings()
+
 
 router = APIRouter(
     prefix='/organizations/{organization_id}/projects', tags=['projects']
@@ -125,3 +133,48 @@ def delete_project(
     project = get_project(session, user, organization_id, project_id)
     session.delete(project)
     session.commit()
+
+
+@router.post('/{project_id}/upload')
+async def upload(
+    organization_id: UUID,
+    project_id: UUID,
+    user: CurrentUser,
+    file: UploadFile,
+    response: Response,
+):
+    if not file:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail='No file uploaded.',
+        )
+
+    contents = await file.read()
+    filetype = magic.from_buffer(contents, mime=True)
+    extension = mimetypes.guess_extension(filetype)
+
+    if not extension:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail='Unsupported file type.',
+        )
+
+    key = f'projects/{project_id}/{uuid4()}{extension}'
+
+    # Save the file to S3
+    s3: S3Client = client('s3')
+    s3response = s3.put_object(
+        Body=contents,
+        Bucket=settings.BUCKET_NAME,
+        Key=key,
+        ContentType=filetype,
+        Metadata={
+            'filename': str(file.filename),
+        },
+    )
+
+    response.status_code = s3response['ResponseMetadata']['HTTPStatusCode']
+
+    return {
+        'path': key,
+    }

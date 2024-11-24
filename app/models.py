@@ -3,7 +3,12 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, ForeignKey, Table, func
-from sqlalchemy.orm import Mapped, mapped_column, registry, relationship
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    registry,
+    relationship,
+)
 
 table_registry = registry()
 
@@ -112,12 +117,11 @@ class Project:
         init=False, server_default=func.now()
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey('organizations.id')
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey('organizations.id'), default=None
     )
 
     # Many-to-one relationship
-    organization: Mapped[Organization] = relationship(
-        'Organization',
-        back_populates='projects',
+    organization: Mapped[Organization | None] = relationship(
+        'Organization', back_populates='projects', default=None
     )

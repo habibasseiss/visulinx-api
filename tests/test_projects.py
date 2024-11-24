@@ -9,7 +9,7 @@ from app.security import get_password_hash
 
 
 @pytest.fixture
-def organization(session: Session, user) -> Organization:
+def organization(session: Session, user: User) -> Organization:
     organization = Organization(  # type: ignore
         name='Test Organization',
         users=[user],
@@ -42,17 +42,14 @@ def other_user(session: Session) -> User:
         organizations=[
             Organization(  # type: ignore
                 name='Other Organization',
+                projects=[
+                    Project(  # type: ignore
+                        name='Other Project',
+                        description='Another test project',
+                    )
+                ],
             ),
         ],
-    )
-
-    user.organizations[0].projects.append(
-        Project(  # type: ignore
-            name='Other Project',
-            description='Another test project',
-            organization=user.organizations[0],
-            organization_id=user.organizations[0].id,
-        )
     )
 
     session.add(user)
