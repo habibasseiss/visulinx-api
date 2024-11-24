@@ -1,4 +1,5 @@
 from http import HTTPStatus
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -180,3 +181,34 @@ def test_delete_project(
         headers={'Authorization': f'Bearer {token}'},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_upload_file(
+    client: TestClient, token: str, organization: Organization, project: Project
+):
+    # Simulate a file upload
+    file_content = b'Sample file content'
+    files = {'file': ('test.txt', file_content, 'text/plain')}
+
+    # Mock the upload_file_to_s3 function
+    with patch('app.routers.projects.upload_file_to_s3') as mock_upload:
+        mock_upload.return_value = {
+            'status_code': HTTPStatus.OK,
+            'path': 'mocked/path/to/test.txt',
+        }
+
+        # Call the endpoint
+        response = client.post(
+            f'/organizations/{organization.id}/projects/{project.id}/upload',
+            headers={'Authorization': f'Bearer {token}'},
+            files=files,
+        )
+
+        # Assertions
+        assert response.status_code == HTTPStatus.OK
+        response_json = response.json()
+        assert 'path' in response_json
+        assert response_json['path'] == 'mocked/path/to/test.txt'
+
+        # Ensure the mock was called once with expected arguments
+        mock_upload.assert_called_once()
