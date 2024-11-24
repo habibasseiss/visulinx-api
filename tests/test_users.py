@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import User
-from app.schemas import UserPublic
 from app.security import get_password_hash
 
 
@@ -25,7 +24,7 @@ def other_user(session: Session) -> User:
     return user
 
 
-def test_user_creation(session: Session):
+def test_db_user_creation(session: Session):
     # Create a new user
     user = User(  # type: ignore
         email='test@example.com',
@@ -51,20 +50,16 @@ def test_create_user(client: TestClient):
         },
     )
     assert response.status_code == HTTPStatus.CREATED
-    assert response.json()['email'] == 'alice@example.com'
+
+    data = response.json()
+    assert data['email'] == 'alice@example.com'
+    # newly created user must have an organization
+    assert any(org['name'] == 'Default' for org in data['organizations'])
 
 
-# def test_read_users(client: TestClient):
-#     response = client.get('/users')
-#     assert response.status_code == HTTPStatus.OK
-#     assert response.json() == {'users': []}
-
-
-def test_read_users_with_users(client: TestClient, user: User):
-    user_schema = UserPublic.model_validate(user).model_dump()
-    user_schema['id'] = str(user_schema['id'])
-    response = client.get('/users/')
-    assert response.json() == {'users': [user_schema]}
+def test_cannot_read_users(client: TestClient):
+    response = client.get('/users')
+    assert response.status_code == HTTPStatus.METHOD_NOT_ALLOWED
 
 
 def test_update_user(client: TestClient, user: User, token: str):

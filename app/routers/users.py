@@ -4,11 +4,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.models import Organization, User
-from app.schemas import Message, UserList, UserPublic, UserSchema
+from app.schemas import Message, UserPublic, UserSchema
 from app.security import (
     get_current_user,
     get_password_hash,
@@ -33,7 +33,7 @@ def create_user(user: UserSchema, session: DbSession):
             )
 
     organization = Organization(  # type: ignore
-        name='default',
+        name='Default',
     )
 
     hashed_password = get_password_hash(user.password)
@@ -49,21 +49,6 @@ def create_user(user: UserSchema, session: DbSession):
     session.refresh(db_user)
 
     return db_user
-
-
-@router.get('/', response_model=UserList)
-def read_users(session: DbSession, skip: int = 0, limit: int = 100):
-    users = (
-        session.scalars(
-            select(User)
-            .options(joinedload(User.organizations))
-            .offset(skip)
-            .limit(limit)
-        )
-        .unique()
-        .all()
-    )
-    return {'users': users}
 
 
 @router.put('/{user_id}', response_model=UserPublic)
