@@ -2,14 +2,13 @@ from http import HTTPStatus
 
 from fastapi import FastAPI
 
-from app.routers import auth, organizations, projects, todos, users
+from app.routers import auth, organizations, projects, users
 from app.schemas import Message
 
 api = FastAPI()
 
 api.include_router(users.router)
 api.include_router(auth.router)
-api.include_router(todos.router)
 api.include_router(organizations.router)
 api.include_router(projects.router)
 

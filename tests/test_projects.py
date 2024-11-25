@@ -1,3 +1,4 @@
+import uuid
 from http import HTTPStatus
 from unittest.mock import patch
 
@@ -5,7 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Organization, Project, User
+from app.models import File, Organization, Project, User
+from app.schemas import FileSchema
 from app.security import get_password_hash
 
 
@@ -43,14 +45,15 @@ def other_user(session: Session) -> User:
         organizations=[
             Organization(  # type: ignore
                 name='Other Organization',
-                projects=[
-                    Project(  # type: ignore
-                        name='Other Project',
-                        description='Another test project',
-                    )
-                ],
+                projects=[],
             ),
         ],
+    )
+    Project(  # type: ignore
+        name='Other Project',
+        description='Another test project',
+        organization=user.organizations[0],
+        organization_id=user.organizations[0].id,
     )
 
     session.add(user)
@@ -100,7 +103,10 @@ def test_create_project(
 
 
 def test_read_project(
-    client: TestClient, token: str, organization: Organization, project: Project
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
 ):
     response = client.get(
         f'/organizations/{organization.id}/projects/{project.id}',
@@ -151,7 +157,10 @@ def test_crud_project_for_wrong_organization(
 
 
 def test_update_project(
-    client: TestClient, token: str, organization: Organization, project: Project
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
 ):
     updated_data = {
         'name': 'Updated Project',
@@ -167,7 +176,10 @@ def test_update_project(
 
 
 def test_delete_project(
-    client: TestClient, token: str, organization: Organization, project: Project
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
 ):
     response = client.delete(
         f'/organizations/{organization.id}/projects/{project.id}',
@@ -184,7 +196,10 @@ def test_delete_project(
 
 
 def test_upload_file(
-    client: TestClient, token: str, organization: Organization, project: Project
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
 ):
     # Simulate a file upload
     file_content = b'Sample file content'
@@ -192,23 +207,125 @@ def test_upload_file(
 
     # Mock the upload_file_to_s3 function
     with patch('app.routers.projects.upload_file_to_s3') as mock_upload:
-        mock_upload.return_value = {
-            'status_code': HTTPStatus.OK,
-            'path': 'mocked/path/to/test.txt',
-        }
+        mock_upload.return_value = FileSchema(
+            path='mocked/path/to/test.txt',
+            size=len(file_content),
+        )
 
         # Call the endpoint
         response = client.post(
-            f'/organizations/{organization.id}/projects/{project.id}/upload',
+            f'/organizations/{organization.id}/projects/{project.id}/files',
             headers={'Authorization': f'Bearer {token}'},
             files=files,
         )
 
         # Assertions
         assert response.status_code == HTTPStatus.OK
-        response_json = response.json()
-        assert 'path' in response_json
+        response_json: dict[str, str] = response.json()
         assert response_json['path'] == 'mocked/path/to/test.txt'
+        assert response_json['size'] == len(file_content)
 
         # Ensure the mock was called once with expected arguments
         mock_upload.assert_called_once()
+
+
+def test_delete_file(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Create a file record in the database
+    db_file = File(  # type: ignore
+        path='projects/test-project/test.txt',
+        size=100,
+        project_id=project.id,
+    )
+    session.add(db_file)
+    session.commit()
+
+    # Mock the delete_file_from_s3 function
+    with patch('app.routers.projects.delete_file_from_s3') as mock_delete:
+        # Call the endpoint
+        response = client.delete(
+            f'/organizations/{organization.id}/projects/{project.id}/files/{db_file.id}',
+            headers={'Authorization': f'Bearer {token}'},
+        )
+
+        # Assertions
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+        # Verify the mock was called with the correct path
+        mock_delete.assert_called_once_with(db_file.path)
+
+        # Verify the file was deleted from database
+        assert (
+            session.query(File).filter(File.id == db_file.id).first() is None
+        )
+
+
+def test_delete_nonexistent_file(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+):
+    # Use a random UUID that doesn't exist in the database
+    nonexistent_file_id = uuid.uuid4()
+
+    # Call the endpoint
+    response = client.delete(
+        f'/organizations/{organization.id}/projects/{project.id}/files/{nonexistent_file_id}',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+
+    # Assertions
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.json()['detail'] == 'File not found in database'
+
+
+def test_delete_file_wrong_organization(
+    client: TestClient,
+    token: str,
+    other_user: User,
+    session: Session,
+):
+    organization = other_user.organizations[0]
+    project = organization.projects[0]
+
+    # Create a file record in the database
+    db_file = File(  # type: ignore
+        path='projects/test-project/test.txt',
+        size=100,
+        project_id=project.id,
+    )
+    session.add(db_file)
+    session.commit()
+
+    # Call the endpoint
+    response = client.delete(
+        f'/organizations/{organization.id}/projects/{project.id}/files/{db_file.id}',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+
+    # Should fail with NOT_FOUND, user doesn't have access to the organization
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_upload_file_wrong_organization(
+    client: TestClient,
+    token: str,
+    other_user: User,
+):
+    # Create a file for upload
+    file_content = b'test content'
+    files = {'file': ('test.txt', file_content, 'text/plain')}
+
+    # Try to upload to a project in an organization the user doesn't belong to
+    response = client.post(
+        f'/organizations/{other_user.organizations[0].id}/projects/{other_user.organizations[0].projects[0].id}/files',
+        files=files,
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == HTTPStatus.NOT_FOUND

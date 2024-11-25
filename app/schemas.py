@@ -2,8 +2,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
-from app.models import TodoState
-
 
 class Message(BaseModel):
     message: str
@@ -48,29 +46,6 @@ class TokenData(BaseModel):
     email: EmailStr | None = None
 
 
-class TodoSchema(BaseModel):
-    title: str
-    description: str
-    state: TodoState
-
-
-class TodoPublic(BaseModel):
-    id: UUID
-    title: str
-    description: str
-    state: TodoState
-
-
-class TodoList(BaseModel):
-    todos: list[TodoPublic]
-
-
-class TodoUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    state: TodoState | None = None
-
-
 class ProjectSchema(BaseModel):
     name: str
     description: str
@@ -86,3 +61,9 @@ class ProjectPublic(BaseModel):
 
 class ProjectList(BaseModel):
     projects: list[ProjectPublic]
+
+
+class FileSchema(BaseModel):
+    id: UUID | None = None
+    path: str
+    size: int

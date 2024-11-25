@@ -7,13 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_session
-from app.models import Organization, Project, User
+from app.models import File, Organization, Project, User
 from app.schemas import ProjectList, ProjectPublic, ProjectSchema
 from app.security import get_current_user
-from app.services.upload_service import upload_file_to_s3
+from app.services.upload_service import delete_file_from_s3, upload_file_to_s3
 from app.settings import Settings
 
-settings = Settings()
+settings = Settings.model_validate({})
 
 
 router = APIRouter(
@@ -132,14 +132,64 @@ def delete_project(
     session.commit()
 
 
-@router.post('/{project_id}/upload')
-async def upload(
+@router.post('/{project_id}/files')
+async def upload(  # noqa
     organization_id: UUID,
     project_id: UUID,
     user: CurrentUser,
     file: UploadFile,
-    response: Response,
+    session: DbSession,
 ):
+    # Verify project exists and user has access
+    _ = get_project(session, user, organization_id, project_id)
+
+    # Upload file to S3
     result = await upload_file_to_s3(project_id, file)
-    response.status_code = result['status_code']
-    return {'path': result['path']}
+
+    # Create file record in database
+    db_file = File(  # type: ignore
+        path=result.path,
+        size=result.size,
+        project_id=project_id,
+    )
+    session.add(db_file)
+    session.commit()
+    result.id = db_file.id
+
+    return result
+
+
+@router.delete(
+    '/{project_id}/files/{file_id}', status_code=HTTPStatus.NO_CONTENT
+)
+async def delete_file(
+    organization_id: UUID,
+    project_id: UUID,
+    file_id: UUID,
+    user: CurrentUser,
+    session: DbSession,
+):
+    # Verify project exists and user has access
+    _ = get_project(session, user, organization_id, project_id)
+
+    # Find the file record in database
+    db_file = (
+        session.query(File)
+        .filter(File.id == file_id, File.project_id == project_id)
+        .first()
+    )
+
+    if not db_file:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail='File not found in database',
+        )
+
+    # Delete file from S3
+    await delete_file_from_s3(db_file.path)
+
+    # Delete the database record
+    session.delete(db_file)
+    session.commit()
+
+    return Response(status_code=HTTPStatus.NO_CONTENT)

@@ -1,14 +1,8 @@
 import uuid
 from datetime import datetime
-from enum import Enum
 
 from sqlalchemy import Column, ForeignKey, Table, func
-from sqlalchemy.orm import (
-    Mapped,
-    mapped_column,
-    registry,
-    relationship,
-)
+from sqlalchemy.orm import Mapped, mapped_column, registry, relationship
 
 table_registry = registry()
 
@@ -30,14 +24,6 @@ organization_user_association = Table(
 )
 
 
-class TodoState(str, Enum):
-    draft = 'draft'
-    todo = 'todo'
-    doing = 'doing'
-    done = 'done'
-    trash = 'trash'
-
-
 @table_registry.mapped_as_dataclass
 class User:
     __tablename__ = 'users'
@@ -50,29 +36,12 @@ class User:
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )
-    todos: Mapped[list['Todo']] = relationship(
-        init=False, back_populates='user', cascade='all, delete-orphan'
-    )
     organizations: Mapped[list['Organization']] = relationship(
         'Organization',
         secondary=organization_user_association,
         back_populates='users',
         default_factory=list,
     )
-
-
-@table_registry.mapped_as_dataclass
-class Todo:
-    __tablename__ = 'todos'
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        init=False, primary_key=True, default_factory=uuid.uuid4
-    )
-    title: Mapped[str] = mapped_column(init=True)
-    description: Mapped[str] = mapped_column(init=True)
-    state: Mapped[TodoState] = mapped_column(init=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), init=True)
-    user: Mapped[User] = relationship(init=False, back_populates='todos')
 
 
 @table_registry.mapped_as_dataclass
@@ -116,12 +85,38 @@ class Project:
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )
-
     organization_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey('organizations.id'), default=None
+        ForeignKey('organizations.id'), nullable=False
     )
-
     # Many-to-one relationship
     organization: Mapped[Organization | None] = relationship(
-        'Organization', back_populates='projects', default=None
+        'Organization', back_populates='projects'
+    )
+    files: Mapped[list['File']] = relationship(
+        'File',
+        back_populates='project',
+        cascade='all, delete-orphan',
+        default_factory=list,
+    )
+
+
+@table_registry.mapped_as_dataclass
+class File:
+    __tablename__ = 'files'
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        init=False, primary_key=True, default_factory=uuid.uuid4
+    )
+    path: Mapped[str] = mapped_column(init=True)
+    size: Mapped[int] = mapped_column(init=True)
+    created_at: Mapped[datetime] = mapped_column(
+        init=False, server_default=func.now()
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey('projects.id'),
+        init=True,
+    )
+    project: Mapped[Project] = relationship(
+        init=False,
+        back_populates='files',
     )

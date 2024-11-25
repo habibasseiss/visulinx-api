@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from http import HTTPStatus
-from typing import Annotated
+from typing import Annotated, Mapping
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, HTTPException
@@ -15,13 +15,13 @@ from app.models import User
 from app.schemas import TokenData
 from app.settings import Settings
 
-settings = Settings()
+settings = Settings.model_validate({})
 pwd_context = PasswordHash.recommended()
 DbSession = Annotated[Session, Depends(get_session)]
 
 
-def create_access_token(data: dict):
-    to_encode = data.copy()
+def create_access_token(data: Mapping[str, object]):
+    to_encode = dict(data)
     expire = datetime.now(tz=ZoneInfo('UTC')) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )

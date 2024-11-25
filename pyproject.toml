@@ -34,7 +34,7 @@ dev = [
 ]
 
 [tool.ruff]
-line-length = 80
+line-length = 79
 extend-exclude = ['migrations']
 
 [tool.ruff.lint]
@@ -62,4 +62,3 @@ post_test = 'coverage html'
 [tool.mypy]
 plugins = ["pydantic.mypy"]
 ignore_missing_imports = true
-

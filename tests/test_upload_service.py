@@ -1,5 +1,5 @@
-from http import HTTPStatus
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import boto3
 import pytest
@@ -9,7 +9,7 @@ from fastapi import UploadFile
 from app.services.upload_service import upload_file_to_s3
 from app.settings import Settings
 
-settings = Settings()
+settings = Settings.model_validate({})
 
 
 @pytest.mark.asyncio
@@ -19,8 +19,12 @@ async def test_upload_file_to_s3():
     stubber = Stubber(s3_client)
 
     # Mock UUID generation to return a fixed value
-    uuid = '327d7bdb-f820-412f-8c5a-34f61ff321be'
-    with patch('app.services.upload_service.uuid4', return_value=uuid):
+    file_id = UUID('327d7bdb-f820-412f-8c5a-34f61ff321be')
+    project_id = UUID('43563e54-7423-4079-b4b9-27a5fa9b8fdf')
+
+    # Mock the response for put_object
+
+    with patch('app.services.upload_service.uuid4', return_value=file_id):
         # Mock the response for put_object
         expected_response = {'ResponseMetadata': {'HTTPStatusCode': 200}}
         stubber.add_response(
@@ -30,7 +34,7 @@ async def test_upload_file_to_s3():
                 'Body': b'Sample file content',
                 'Bucket': settings.BUCKET_NAME,
                 'ContentType': 'text/plain',
-                'Key': f'projects/test_project_id/{uuid}.txt',
+                'Key': f'projects/{project_id}/{file_id}.txt',
                 'Metadata': {'filename': 'test.txt'},
             },
         )
@@ -49,11 +53,11 @@ async def test_upload_file_to_s3():
             return_value=s3_client,
         ):
             # Call the upload function
-            result = await upload_file_to_s3('test_project_id', file)
+            result = await upload_file_to_s3(project_id, file)
 
             # Assertions
-            assert result['status_code'] == HTTPStatus.OK
-            assert 'path' in result
+            assert result.path == f'projects/{project_id}/{file_id}.txt'
+            assert result.size == len(file_content)
 
         # Deactivate the Stubber
         stubber.deactivate()

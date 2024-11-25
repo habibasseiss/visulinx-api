@@ -1,15 +1,14 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 from app.models import table_registry
 from app.settings import Settings
 
 config = context.config
-config.set_main_option('sqlalchemy.url', Settings().get_database_url())
+settings = Settings.model_validate({})
+config.set_main_option('sqlalchemy.url', settings.get_database_url())
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

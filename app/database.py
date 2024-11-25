@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.settings import Settings
 
-engine = create_engine(Settings().get_database_url())
+settings = Settings.model_validate({})
+engine = create_engine(settings.get_database_url())
 
 
 def get_session():
