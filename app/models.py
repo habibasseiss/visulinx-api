@@ -57,7 +57,7 @@ class Organization:
     id: Mapped[uuid.UUID] = mapped_column(
         init=False, primary_key=True, default_factory=uuid.uuid4
     )
-    name: Mapped[str] = mapped_column(unique=True)
+    name: Mapped[str] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )
@@ -86,7 +86,7 @@ class Project:
     id: Mapped[uuid.UUID] = mapped_column(
         init=False, primary_key=True, default_factory=uuid.uuid4
     )
-    name: Mapped[str] = mapped_column(unique=True)
+    name: Mapped[str] = mapped_column()
     description: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
