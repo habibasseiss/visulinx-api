@@ -3,7 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file='.env', env_file_encoding='utf-8'
+        env_file='.env',
+        env_file_encoding='utf-8',
     )
 
     DATABASE_URL: str
@@ -17,8 +18,13 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     BUCKET_NAME: str
 
+    CORS_ORIGINS: str
+
     def get_database_url(self) -> str:
         url = self.DATABASE_URL
         if 'postgres://' in url:
             url = url.replace('postgres://', 'postgresql://')
         return url
+
+    def get_origins(self) -> list[str]:
+        return self.CORS_ORIGINS.split(',')
