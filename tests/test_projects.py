@@ -397,16 +397,187 @@ async def test_project_deletion_with_files(
     for file in files:
         session.refresh(file)
 
+    # Delete the project
+    response = client.delete(
+        f'/organizations/{organization.id}/projects/{project.id}',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Verify project is marked as deleted but files still exist
+    db_project = session.get(Project, project.id)
+    assert db_project is not None
+    assert db_project.deleted_at is not None
+
+    for file in files:
+        db_file = session.get(File, file.id)
+        assert db_file is not None
+
+
+@pytest.mark.asyncio
+async def test_project_deletion_handles_s3_error(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Create a test file
+    file = File(  # type: ignore
+        path=f'projects/{project.id}/test.txt',
+        size=100,
+        mime_type='text/plain',
+        original_filename='test.txt',
+        project_id=project.id,
+    )
+    session.add(file)
+    session.commit()
+    session.refresh(file)
+
+    # Delete the project
+    response = client.delete(
+        f'/organizations/{organization.id}/projects/{project.id}',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+
+    # Expect success
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Verify project is marked as deleted but file still exists
+    db_project = session.get(Project, project.id)
+    assert db_project is not None
+    assert db_project.deleted_at is not None
+
+    db_file = session.get(File, file.id)
+    assert db_file is not None
+
+
+def test_soft_delete_project(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Delete the project
+    response = client.delete(
+        f'/organizations/{organization.id}/projects/{project.id}',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Verify project is not in the list
+    response = client.get(
+        f'/organizations/{organization.id}/projects',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == HTTPStatus.OK
+    data = response.json()
+    assert len(data['projects']) == 0
+
+    # Verify project cannot be accessed directly
+    response = client.get(
+        f'/organizations/{organization.id}/projects/{project.id}',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+    # Verify project exists in database with deleted_at timestamp
+    db_project = session.get(Project, project.id)
+    assert db_project is not None
+    assert db_project.deleted_at is not None
+
+
+def test_soft_delete_project_with_files(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Add a file to the project
+    file = File(  # type: ignore
+        path='test/path',
+        size=100,
+        mime_type='text/plain',
+        original_filename='test.txt',
+        project_id=project.id,
+    )
+    session.add(file)
+    session.commit()
+
+    # Delete the project
+    response = client.delete(
+        f'/organizations/{organization.id}/projects/{project.id}',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Verify project and file still exist in database
+    db_project = session.get(Project, project.id)
+    assert db_project is not None
+    assert db_project.deleted_at is not None
+
+    db_file = session.get(File, file.id)
+    assert db_file is not None
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_project(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Delete the project
+    response = client.delete(
+        f'/organizations/{organization.id}/projects/{project.id}/hard',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Verify project is completely removed from database
+    db_project = session.get(Project, project.id)
+    assert db_project is None
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_project_with_files(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Create some test files in the database
+    files = [
+        File(  # type: ignore
+            path=f'projects/{project.id}/test{i}.txt',
+            size=100,
+            mime_type='text/plain',
+            original_filename=f'test{i}.txt',
+            project_id=project.id,
+        )
+        for i in range(3)
+    ]
+    session.add_all(files)
+    session.commit()
+    for file in files:
+        session.refresh(file)
+
     # Mock the S3 deletion
     with patch('app.services.upload_service.boto3.client') as mock_s3:
-        mock_s3_client = mock_s3.return_value
-        mock_s3_client.delete_object.return_value = {
-            'ResponseMetadata': {'HTTPStatusCode': HTTPStatus.NO_CONTENT}
-        }
+        mock_s3_client: S3Client = mock_s3.return_value
+        mock_s3_client.delete_object = MagicMock(  # type: ignore
+            return_value={
+                'ResponseMetadata': {'HTTPStatusCode': HTTPStatus.NO_CONTENT}
+            }
+        )
 
         # Delete the project
         response = client.delete(
-            f'/organizations/{organization.id}/projects/{project.id}',
+            f'/organizations/{organization.id}/projects/{project.id}/hard',
             headers={'Authorization': f'Bearer {token}'},
         )
         assert response.status_code == HTTPStatus.NO_CONTENT
@@ -419,21 +590,18 @@ async def test_project_deletion_with_files(
                 Key=file.path,
             )
 
-        # Verify files are deleted from database
-        db_files = (
-            session.query(File).filter(File.project_id == project.id).all()
-        )
-        assert len(db_files) == 0
+    # Verify files are deleted from database
+    for file in files:
+        db_file = session.get(File, file.id)
+        assert db_file is None
 
-        # Verify project is deleted
-        db_project = (
-            session.query(Project).filter(Project.id == project.id).first()
-        )
-        assert db_project is None
+    # Verify project is deleted
+    db_project = session.get(Project, project.id)
+    assert db_project is None
 
 
 @pytest.mark.asyncio
-async def test_project_deletion_handles_s3_error(
+async def test_hard_delete_project_handles_s3_error(
     client: TestClient,
     token: str,
     organization: Organization,
@@ -465,7 +633,7 @@ async def test_project_deletion_handles_s3_error(
 
         # Delete the project
         response = client.delete(
-            f'/organizations/{organization.id}/projects/{project.id}',
+            f'/organizations/{organization.id}/projects/{project.id}/hard',
             headers={'Authorization': f'Bearer {token}'},
         )
 
@@ -478,10 +646,8 @@ async def test_project_deletion_handles_s3_error(
             Key=file.path,
         )
 
-        # Verify database records are deleted
-        db_file = session.query(File).filter(File.id == file.id).first()
-        assert db_file is None
-        db_project = (
-            session.query(Project).filter(Project.id == project.id).first()
-        )
-        assert db_project is None
+    # Verify database records are deleted even if S3 deletion fails
+    db_file = session.get(File, file.id)
+    assert db_file is None
+    db_project = session.get(Project, project.id)
+    assert db_project is None

@@ -91,6 +91,9 @@ class Project:
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        init=False, nullable=True, default=None
+    )
     organization_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey('organizations.id'), nullable=False
     )
