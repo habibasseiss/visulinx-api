@@ -51,19 +51,31 @@ class ProjectSchema(BaseModel):
     description: str
 
 
+class FileSchema(BaseModel):
+    id: UUID | None = None
+    path: str
+    size: int
+    mime_type: str
+    original_filename: str
+
+
+class FilePublic(BaseModel):
+    id: UUID
+    path: str
+    size: int
+    mime_type: str
+    original_filename: str
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ProjectPublic(BaseModel):
     id: UUID
     name: str
     description: str
     organization_id: UUID
+    files: list[FilePublic] = []
     model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectList(BaseModel):
     projects: list[ProjectPublic]
-
-
-class FileSchema(BaseModel):
-    id: UUID | None = None
-    path: str
-    size: int

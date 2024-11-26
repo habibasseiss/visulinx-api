@@ -1,14 +1,18 @@
 import uuid
 from http import HTTPStatus
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from mypy_boto3_s3.client import S3Client
 from sqlalchemy.orm import Session
 
 from app.models import File, Organization, Project, User
 from app.schemas import FileSchema
 from app.security import get_password_hash
+from app.settings import Settings
+
+settings = Settings.model_validate({})
 
 
 @pytest.fixture
@@ -116,6 +120,38 @@ def test_read_project(
     assert response.json()['name'] == project.name
 
 
+def test_read_project_with_files(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Create a test file associated with the project
+    test_file = File(  # type: ignore
+        path='test_file.txt',
+        size=100,
+        project_id=project.id,
+        mime_type='text/plain',
+        original_filename='test_file.txt',
+    )
+    session.add(test_file)
+    session.commit()
+    session.refresh(project)
+
+    response = client.get(
+        f'/organizations/{organization.id}/projects/{project.id}',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == HTTPStatus.OK
+    response_json = response.json()
+    assert response_json['name'] == project.name
+    assert 'files' in response_json
+    assert len(response_json['files']) == 1
+    assert response_json['files'][0]['path'] == 'test_file.txt'
+    assert response_json['files'][0]['size'] == 100  # noqa: PLR2004
+
+
 def test_crud_project_for_wrong_organization(
     client: TestClient, token: str, other_user: User
 ):
@@ -210,6 +246,8 @@ def test_upload_file(
         mock_upload.return_value = FileSchema(
             path='mocked/path/to/test.txt',
             size=len(file_content),
+            mime_type='text/plain',
+            original_filename='test.txt',
         )
 
         # Call the endpoint
@@ -220,7 +258,7 @@ def test_upload_file(
         )
 
         # Assertions
-        assert response.status_code == HTTPStatus.OK
+        assert response.status_code == HTTPStatus.CREATED
         response_json: dict[str, str] = response.json()
         assert response_json['path'] == 'mocked/path/to/test.txt'
         assert response_json['size'] == len(file_content)
@@ -241,6 +279,8 @@ def test_delete_file(
         path='projects/test-project/test.txt',
         size=100,
         project_id=project.id,
+        mime_type='text/plain',
+        original_filename='test.txt',
     )
     session.add(db_file)
     session.commit()
@@ -299,6 +339,8 @@ def test_delete_file_wrong_organization(
         path='projects/test-project/test.txt',
         size=100,
         project_id=project.id,
+        mime_type='text/plain',
+        original_filename='test.txt',
     )
     session.add(db_file)
     session.commit()
@@ -329,3 +371,117 @@ def test_upload_file_wrong_organization(
         headers={'Authorization': f'Bearer {token}'},
     )
     assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_project_deletion_with_files(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Create some test files in the database
+    files = [
+        File(  # type: ignore
+            path=f'projects/{project.id}/test{i}.txt',
+            size=100,
+            mime_type='text/plain',
+            original_filename=f'test{i}.txt',
+            project_id=project.id,
+        )
+        for i in range(3)
+    ]
+    session.add_all(files)
+    session.commit()
+    for file in files:
+        session.refresh(file)
+
+    # Mock the S3 deletion
+    with patch('app.services.upload_service.boto3.client') as mock_s3:
+        mock_s3_client = mock_s3.return_value
+        mock_s3_client.delete_object.return_value = {
+            'ResponseMetadata': {'HTTPStatusCode': HTTPStatus.NO_CONTENT}
+        }
+
+        # Delete the project
+        response = client.delete(
+            f'/organizations/{organization.id}/projects/{project.id}',
+            headers={'Authorization': f'Bearer {token}'},
+        )
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+        # Verify S3 files were deleted
+        assert mock_s3_client.delete_object.call_count == 3  # noqa: PLR2004
+        for file in files:
+            mock_s3_client.delete_object.assert_any_call(
+                Bucket=settings.BUCKET_NAME,
+                Key=file.path,
+            )
+
+        # Verify files are deleted from database
+        db_files = (
+            session.query(File).filter(File.project_id == project.id).all()
+        )
+        assert len(db_files) == 0
+
+        # Verify project is deleted
+        db_project = (
+            session.query(Project).filter(Project.id == project.id).first()
+        )
+        assert db_project is None
+
+
+@pytest.mark.asyncio
+async def test_project_deletion_handles_s3_error(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Create a test file
+    file = File(  # type: ignore
+        path=f'projects/{project.id}/test.txt',
+        size=100,
+        mime_type='text/plain',
+        original_filename='test.txt',
+        project_id=project.id,
+    )
+    session.add(file)
+    session.commit()
+    session.refresh(file)
+
+    # Mock S3 deletion to fail
+    with patch('app.services.upload_service.boto3.client') as mock_s3:
+        mock_s3_client: S3Client = mock_s3.return_value
+        mock_s3_client.delete_object = MagicMock(  # type: ignore
+            return_value={
+                'ResponseMetadata': {
+                    'HTTPStatusCode': HTTPStatus.INTERNAL_SERVER_ERROR
+                }
+            }
+        )
+
+        # Delete the project
+        response = client.delete(
+            f'/organizations/{organization.id}/projects/{project.id}',
+            headers={'Authorization': f'Bearer {token}'},
+        )
+
+        # Expect success even if S3 deletion fails
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+        # Verify S3 deletion was attempted
+        mock_s3_client.delete_object.assert_called_once_with(
+            Bucket=settings.BUCKET_NAME,
+            Key=file.path,
+        )
+
+        # Verify database records are deleted
+        db_file = session.query(File).filter(File.id == file.id).first()
+        assert db_file is None
+        db_project = (
+            session.query(Project).filter(Project.id == project.id).first()
+        )
+        assert db_project is None

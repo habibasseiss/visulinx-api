@@ -132,8 +132,8 @@ def delete_project(
     session.commit()
 
 
-@router.post('/{project_id}/files')
-async def upload(  # noqa
+@router.post('/{project_id}/files', status_code=HTTPStatus.CREATED)
+async def upload(
     organization_id: UUID,
     project_id: UUID,
     user: CurrentUser,
@@ -151,6 +151,8 @@ async def upload(  # noqa
         path=result.path,
         size=result.size,
         project_id=project_id,
+        mime_type=result.mime_type,
+        original_filename=result.original_filename,
     )
     session.add(db_file)
     session.commit()

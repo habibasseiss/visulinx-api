@@ -1,11 +1,17 @@
+import asyncio
+import logging
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, ForeignKey, Table, func
+from fastapi import HTTPException
+from sqlalchemy import Column, ForeignKey, Table, event, func
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship
+
+from app.services.upload_service import delete_file_from_s3
 
 table_registry = registry()
 
+logger = logging.getLogger(__name__)
 
 # Association table for many-to-many relationship: Organization and User
 organization_user_association = Table(
@@ -100,6 +106,28 @@ class Project:
     )
 
 
+# Set up event listener for Project deletion
+@event.listens_for(Project, 'before_delete')
+def delete_project_files_from_s3(mapper, connection, target: Project):
+    # We need to run the async function in a new event loop
+    for file in target.files:
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(delete_file_from_s3(file.path))
+        except HTTPException as e:
+            # Log the error but don't stop the deletion process
+            logger.error(
+                f'Failed to delete file {file.path} from S3: {str(e)}'
+            )
+        except Exception as e:
+            # Log any other unexpected errors
+            logger.error(
+                f'Unexpected error deleting file {file.path} from S3: {str(e)}'
+            )
+        finally:
+            loop.close()
+
+
 @table_registry.mapped_as_dataclass
 class File:
     __tablename__ = 'files'
@@ -109,6 +137,8 @@ class File:
     )
     path: Mapped[str] = mapped_column(init=True)
     size: Mapped[int] = mapped_column(init=True)
+    mime_type: Mapped[str] = mapped_column(init=True)
+    original_filename: Mapped[str] = mapped_column(init=True)
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )

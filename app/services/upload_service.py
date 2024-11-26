@@ -15,9 +15,9 @@ settings = Settings.model_validate({})
 
 async def upload_file_to_s3(project_id: UUID, file: UploadFile) -> FileSchema:
     contents = await file.read()
-    filetype = magic.from_buffer(contents, mime=True)
+    mime_type = str(magic.from_buffer(contents, mime=True))
     filesize = len(contents)
-    extension = mimetypes.guess_extension(filetype)
+    extension = mimetypes.guess_extension(mime_type)
 
     if not extension:
         raise HTTPException(
@@ -33,7 +33,7 @@ async def upload_file_to_s3(project_id: UUID, file: UploadFile) -> FileSchema:
         Body=contents,
         Bucket=settings.BUCKET_NAME,
         Key=key,
-        ContentType=filetype,
+        ContentType=mime_type,
         Metadata={
             'filename': str(file.filename),
         },
@@ -48,6 +48,8 @@ async def upload_file_to_s3(project_id: UUID, file: UploadFile) -> FileSchema:
     return FileSchema(
         path=key,
         size=filesize,
+        mime_type=mime_type,
+        original_filename=str(file.filename),
     )
 
 
