@@ -9,10 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_session
 from app.models import Organization, User
 from app.schemas import Message, UserPublic, UserSchema
-from app.security import (
-    get_current_user,
-    get_password_hash,
-)
+from app.security import get_current_user, get_password_hash
 
 router = APIRouter(prefix='/users', tags=['users'])
 DbSession = Annotated[Session, Depends(get_session)]
@@ -49,6 +46,11 @@ def create_user(user: UserSchema, session: DbSession):
     session.refresh(db_user)
 
     return db_user
+
+
+@router.get('/me', response_model=UserPublic)
+def read_user(current_user: CurrentUser):
+    return current_user
 
 
 @router.put('/{user_id}', response_model=UserPublic)

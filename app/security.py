@@ -25,7 +25,19 @@ def create_access_token(data: Mapping[str, object]):
     expire = datetime.now(tz=ZoneInfo('UTC')) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
-    to_encode.update({'exp': expire})
+    to_encode.update({'exp': expire, 'type': 'access'})
+    encoded_jwt = encode(
+        to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
+    return encoded_jwt
+
+
+def create_refresh_token(data: Mapping[str, object]):
+    to_encode = dict(data)
+    expire = datetime.now(tz=ZoneInfo('UTC')) + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
+    to_encode.update({'exp': expire, 'type': 'refresh'})
     encoded_jwt = encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
@@ -38,6 +50,36 @@ def get_password_hash(password: str):
 
 def verify_password(plain_password: str, hashed_password: str):
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def verify_token(token: str, token_type: str):
+    try:
+        payload = decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        if payload.get('type') != token_type:
+            raise HTTPException(
+                status_code=HTTPStatus.UNAUTHORIZED,
+                detail='Invalid token type',
+            )
+        email: str = payload.get('sub')
+        if email is None:
+            raise HTTPException(
+                status_code=HTTPStatus.UNAUTHORIZED,
+                detail='Could not validate credentials',
+            )
+        token_data = TokenData(email=email)
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=HTTPStatus.UNAUTHORIZED,
+            detail='Token has expired',
+        )
+    except DecodeError:
+        raise HTTPException(
+            status_code=HTTPStatus.UNAUTHORIZED,
+            detail='Could not validate credentials',
+        )
+    return token_data
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/token')
@@ -54,16 +96,8 @@ async def get_current_user(
     )
 
     try:
-        payload = decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-        )
-        email: str = payload.get('sub')
-        if not email:
-            raise credentials_exception
-        token_data = TokenData(email=email)
-    except DecodeError:
-        raise credentials_exception
-    except ExpiredSignatureError:
+        token_data = verify_token(token, 'access')
+    except HTTPException:
         raise credentials_exception
 
     user = session.scalar(select(User).where(User.email == token_data.email))

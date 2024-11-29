@@ -11,8 +11,9 @@ from app.models import User
 from app.schemas import Token
 from app.security import (
     create_access_token,
-    get_current_user,
+    create_refresh_token,
     verify_password,
+    verify_token,
 )
 
 router = APIRouter(prefix='/auth', tags=['auth'])
@@ -38,14 +39,24 @@ def login_for_access_token(form_data: OAuth2Form, session: DbSession):
         )
 
     access_token = create_access_token(data={'sub': user.email})
+    refresh_token = create_refresh_token(data={'sub': user.email})
 
-    return {'access_token': access_token, 'token_type': 'bearer'}
+    return {
+        'access_token': access_token,
+        'refresh_token': refresh_token,
+        'token_type': 'bearer',
+    }
 
 
-@router.post('/refresh_token', response_model=Token)
-def refresh_access_token(
-    user: User = Depends(get_current_user),
-):
-    new_access_token = create_access_token(data={'sub': user.email})
+@router.post('/refresh', response_model=Token)
+def refresh_access_token(refresh_token: str):
+    token_data = verify_token(refresh_token, 'refresh')
 
-    return {'access_token': new_access_token, 'token_type': 'bearer'}
+    access_token = create_access_token(data={'sub': token_data.email})
+    new_refresh_token = create_refresh_token(data={'sub': token_data.email})
+
+    return {
+        'access_token': access_token,
+        'refresh_token': new_refresh_token,
+        'token_type': 'bearer',
+    }

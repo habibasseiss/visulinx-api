@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.models import Organization, User
-from app.schemas import OrganizationList
+from app.schemas import OrganizationList, OrganizationPublic
 from app.security import get_current_user
 
 router = APIRouter(prefix='/organizations', tags=['organizations'])
@@ -41,3 +41,12 @@ def list_organizations(session: DbSession, user: CurrentUser):
         select(Organization).where(Organization.users.contains(user))
     ).all()
     return {'organizations': organizations}
+
+
+@router.get('/{organization_id}', response_model=OrganizationPublic)
+def read_organization(
+    organization_id: UUID,
+    session: DbSession,
+    user: CurrentUser,
+):
+    return get_organization(session, user, organization_id)
