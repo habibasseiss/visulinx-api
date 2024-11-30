@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.models import User
-from app.schemas import Token
+from app.schemas import RefreshToken, Token
 from app.security import (
     create_access_token,
     create_refresh_token,
@@ -49,8 +49,8 @@ def login_for_access_token(form_data: OAuth2Form, session: DbSession):
 
 
 @router.post('/refresh', response_model=Token)
-def refresh_access_token(refresh_token: str):
-    token_data = verify_token(refresh_token, 'refresh')
+def refresh_access_token(token: RefreshToken):
+    token_data = verify_token(token.refresh_token, 'refresh')
 
     access_token = create_access_token(data={'sub': token_data.email})
     new_refresh_token = create_refresh_token(data={'sub': token_data.email})

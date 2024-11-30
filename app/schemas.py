@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr
@@ -21,6 +22,7 @@ class FilePublic(BaseModel):
     size: int
     mime_type: str
     original_filename: str
+    created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -34,6 +36,7 @@ class ProjectPublic(BaseModel):
     name: str
     description: str
     organization_id: UUID
+    created_at: datetime
     files: list[FilePublic] = []
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,19 +45,18 @@ class ProjectList(BaseModel):
     projects: list[ProjectPublic]
 
 
-class OrganizationSchema(BaseModel):
-    name: str
-
-
-class OrganizationPublic(BaseModel):
+class OrganizationBasic(BaseModel):
     id: UUID
     name: str
-    projects: list[ProjectPublic]
     model_config = ConfigDict(from_attributes=True)
 
 
+class OrganizationPublic(OrganizationBasic):
+    projects: list[ProjectPublic]
+
+
 class OrganizationList(BaseModel):
-    organizations: list[OrganizationPublic]
+    organizations: list[OrganizationBasic]
 
 
 class UserSchema(BaseModel):
@@ -65,7 +67,7 @@ class UserSchema(BaseModel):
 class UserPublic(BaseModel):
     id: UUID
     email: EmailStr
-    organizations: list[OrganizationPublic]
+    organizations: list[OrganizationBasic]
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -81,3 +83,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: EmailStr | None = None
+
+
+class RefreshToken(BaseModel):
+    refresh_token: str
