@@ -1,0 +1,9 @@
+#!/bin/sh
+
+if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters. Usage: shrinkpdf filename.pdf"
+    exit
+fi
+
+f=${1%.pdf}_red.pdf
+gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dDownsampleColorImages=true -dColorImageResolution=250 -dNOPAUSE  -dBATCH -sOutputFile="${f}" "${1}" && mv -f "${f}" "${1}"

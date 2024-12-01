@@ -50,6 +50,7 @@ def test_get_token(client: TestClient, user: User):
 
     assert response.status_code == HTTPStatus.OK
     assert 'access_token' in token
+    assert 'refresh_token' in token
     assert 'token_type' in token
 
 
@@ -96,10 +97,10 @@ def test_token_wrong_password(client: TestClient, user: User):
     assert response.json() == {'detail': 'Incorrect email or password'}
 
 
-def test_refresh_token(client: TestClient, user: User, token: str):
+def test_refresh_token(client: TestClient, user: User, refresh_token: str):
     response = client.post(
-        '/auth/refresh_token',
-        headers={'Authorization': f'Bearer {token}'},
+        '/auth/refresh',
+        json={'refresh_token': refresh_token},
     )
 
     data = response.json()
@@ -111,6 +112,10 @@ def test_refresh_token(client: TestClient, user: User, token: str):
 
 
 def test_token_expired_dont_refresh(client: TestClient, user: User):
+    """
+    Ensure tokens can't be refreshed after expiration
+    """
+    refresh_token = ''
     with freeze_time('2023-07-14 12:00:00'):
         response = client.post(
             '/auth/token',
@@ -120,12 +125,20 @@ def test_token_expired_dont_refresh(client: TestClient, user: User):
             },
         )
         assert response.status_code == HTTPStatus.OK
-        token = response.json()['access_token']
+        refresh_token = response.json()['refresh_token']
 
-    with freeze_time('2023-07-14 12:31:00'):
+    with freeze_time('2023-07-21 11:59:59'):
         response = client.post(
-            '/auth/refresh_token',
-            headers={'Authorization': f'Bearer {token}'},
+            '/auth/refresh',
+            json={'refresh_token': refresh_token},
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    # Refresh token expires after 7 days
+    with freeze_time('2023-07-21 12:00:00'):
+        response = client.post(
+            '/auth/refresh',
+            json={'refresh_token': refresh_token},
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
-        assert response.json() == {'detail': 'Could not validate credentials'}
+        assert response.json() == {'detail': 'Token has expired'}

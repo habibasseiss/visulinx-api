@@ -96,3 +96,15 @@ def token(client: TestClient, user: User) -> str:
         },
     )
     return response.json()['access_token']
+
+
+@pytest.fixture
+def refresh_token(client: TestClient, user: User) -> str:
+    response = client.post(
+        '/auth/token',
+        data={
+            'username': user.email,
+            'password': user.clean_password,  # type: ignore
+        },
+    )
+    return response.json()['refresh_token']

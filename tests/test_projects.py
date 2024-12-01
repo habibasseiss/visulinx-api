@@ -239,7 +239,7 @@ def test_upload_file(
 ):
     # Simulate a file upload
     file_content = b'Sample file content'
-    files = {'file': ('test.txt', file_content, 'text/plain')}
+    files = [('files', ('test.txt', file_content, 'text/plain'))]
 
     # Mock the upload_file_to_s3 function
     with patch('app.routers.projects.upload_file_to_s3') as mock_upload:
@@ -259,9 +259,12 @@ def test_upload_file(
 
         # Assertions
         assert response.status_code == HTTPStatus.CREATED
-        response_json: dict[str, str] = response.json()
-        assert response_json['path'] == 'mocked/path/to/test.txt'
-        assert response_json['size'] == len(file_content)
+        response_json = response.json()
+        assert isinstance(response_json, list)
+        assert len(response_json) == 1
+        file_response = response_json[0]
+        assert file_response['path'] == 'mocked/path/to/test.txt'
+        assert file_response['size'] == len(file_content)
 
         # Ensure the mock was called once with expected arguments
         mock_upload.assert_called_once()
@@ -362,7 +365,7 @@ def test_upload_file_wrong_organization(
 ):
     # Create a file for upload
     file_content = b'test content'
-    files = {'file': ('test.txt', file_content, 'text/plain')}
+    files = [('files', ('test.txt', file_content, 'text/plain'))]
 
     # Try to upload to a project in an organization the user doesn't belong to
     response = client.post(

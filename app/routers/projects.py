@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime
 from http import HTTPStatus
@@ -174,28 +175,36 @@ async def upload(
     organization_id: UUID,
     project_id: UUID,
     user: CurrentUser,
-    file: UploadFile,
+    files: list[UploadFile],
     session: DbSession,
 ):
     # Verify project exists and user has access
     _ = get_project(session, user, organization_id, project_id)
 
-    # Upload file to S3
-    result = await upload_file_to_s3(project_id, file)
+    # Upload files to S3 in parallel
+    upload_tasks = [upload_file_to_s3(project_id, file) for file in files]
+    results = await asyncio.gather(*upload_tasks)
 
-    # Create file record in database
-    db_file = File(  # type: ignore
-        path=result.path,
-        size=result.size,
-        project_id=project_id,
-        mime_type=result.mime_type,
-        original_filename=result.original_filename,
-    )
-    session.add(db_file)
+    # Create file records in database
+    db_files = []
+    for result in results:
+        db_file = File(  # type: ignore
+            path=result.path,
+            size=result.size,
+            project_id=project_id,
+            mime_type=result.mime_type,
+            original_filename=result.original_filename,
+        )
+        db_files.append(db_file)
+        session.add(db_file)
+
     session.commit()
-    result.id = db_file.id
 
-    return result
+    # Update results with database IDs
+    for result, db_file in zip(results, db_files):
+        result.id = db_file.id
+
+    return results
 
 
 @router.delete(
