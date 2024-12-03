@@ -5,7 +5,14 @@ from http import HTTPStatus
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -207,37 +214,54 @@ async def upload(
     return results
 
 
-@router.delete(
-    '/{project_id}/files/{file_id}', status_code=HTTPStatus.NO_CONTENT
-)
+@router.delete('/{project_id}/files', status_code=HTTPStatus.NO_CONTENT)
 async def delete_file(
     organization_id: UUID,
     project_id: UUID,
-    file_id: UUID,
     user: CurrentUser,
     session: DbSession,
+    ids: list[UUID] = Query(alias='ids[]'),
 ):
     # Verify project exists and user has access
     _ = get_project(session, user, organization_id, project_id)
 
-    # Find the file record in database
-    db_file = (
-        session.query(File)
-        .filter(File.id == file_id, File.project_id == project_id)
-        .first()
-    )
-
-    if not db_file:
+    if not ids:
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail='File not found in database',
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail='No file IDs provided.',
         )
 
-    # Delete file from S3
-    await delete_file_from_s3(db_file.path)
+    # Remove duplicates in ids
+    ids = list(set(ids))
 
-    # Delete the database record
-    session.delete(db_file)
+    # Find all file records in database
+    db_files = (
+        session.query(File)
+        .filter(File.id.in_(ids), File.project_id == project_id)
+        .all()
+    )
+
+    if not db_files:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail='No files found in database',
+        )
+
+    # Delete files from S3 in parallel
+    await asyncio.gather(*[
+        delete_file_from_s3(file.path) for file in db_files
+    ])
+
+    # Delete the database records
+    for db_file in db_files:
+        session.delete(db_file)
+    session.commit()
+
+    return Response(status_code=HTTPStatus.NO_CONTENT)
+
+    # Delete the database records
+    for db_file in db_files:
+        session.delete(db_file)
     session.commit()
 
     return Response(status_code=HTTPStatus.NO_CONTENT)

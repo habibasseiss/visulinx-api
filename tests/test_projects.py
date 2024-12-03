@@ -1,6 +1,6 @@
 import uuid
 from http import HTTPStatus
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -277,34 +277,69 @@ def test_delete_file(
     project: Project,
     session: Session,
 ):
-    # Create a file record in the database
-    db_file = File(  # type: ignore
-        path='projects/test-project/test.txt',
-        size=100,
-        project_id=project.id,
-        mime_type='text/plain',
-        original_filename='test.txt',
-    )
-    session.add(db_file)
+    # Create three file records in the database
+    db_files = [
+        File(  # type: ignore
+            path=f'projects/test-project/test{i}.txt',
+            size=100,
+            project_id=project.id,
+            mime_type='text/plain',
+            original_filename=f'test{i}.txt',
+        )
+        for i in range(3)
+    ]
+    session.add_all(db_files)
     session.commit()
 
-    # Mock the delete_file_from_s3 function
+    # Test deleting a single file
     with patch('app.routers.projects.delete_file_from_s3') as mock_delete:
-        # Call the endpoint
         response = client.delete(
-            f'/organizations/{organization.id}/projects/{project.id}/files/{db_file.id}',
+            f'/organizations/{organization.id}/projects/{project.id}/files',
             headers={'Authorization': f'Bearer {token}'},
+            params={'ids[]': str(db_files[0].id)},
         )
 
-        # Assertions
+        # Assertions for single file deletion
+        assert response.status_code == HTTPStatus.NO_CONTENT
+        mock_delete.assert_called_once_with(db_files[0].path)
+        assert (
+            session.query(File).filter(File.id == db_files[0].id).first()
+            is None
+        )
+        assert (
+            session.query(File).filter(File.id == db_files[1].id).first()
+            is not None
+        )
+
+    # Test deleting multiple files
+    with patch('app.routers.projects.delete_file_from_s3') as mock_delete:
+        response = client.delete(
+            f'/organizations/{organization.id}/projects/{project.id}/files',
+            headers={'Authorization': f'Bearer {token}'},
+            params={'ids[]': [str(db_files[1].id), str(db_files[2].id)]},
+        )
+
+        # Assertions for multiple file deletion
         assert response.status_code == HTTPStatus.NO_CONTENT
 
-        # Verify the mock was called with the correct path
-        mock_delete.assert_called_once_with(db_file.path)
+        # Verify both files were deleted from S3
+        mock_delete.assert_has_calls(
+            [
+                call(db_files[1].path),
+                call(db_files[2].path),
+            ],
+            any_order=True,
+        )
+        assert mock_delete.call_count == 2  # noqa: PLR2004
 
-        # Verify the file was deleted from database
+        # Verify both files were deleted from database
         assert (
-            session.query(File).filter(File.id == db_file.id).first() is None
+            session.query(File).filter(File.id == db_files[1].id).first()
+            is None
+        )
+        assert (
+            session.query(File).filter(File.id == db_files[2].id).first()
+            is None
         )
 
 
@@ -319,13 +354,14 @@ def test_delete_nonexistent_file(
 
     # Call the endpoint
     response = client.delete(
-        f'/organizations/{organization.id}/projects/{project.id}/files/{nonexistent_file_id}',
+        f'/organizations/{organization.id}/projects/{project.id}/files',
         headers={'Authorization': f'Bearer {token}'},
+        params={'ids[]': str(nonexistent_file_id)},
     )
 
     # Assertions
     assert response.status_code == HTTPStatus.NOT_FOUND
-    assert response.json()['detail'] == 'File not found in database'
+    assert response.json()['detail'] == 'No files found in database'
 
 
 def test_delete_file_wrong_organization(

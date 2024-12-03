@@ -26,6 +26,10 @@ class FilePublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DeleteFilesSchema(BaseModel):
+    file_ids: list[UUID]
+
+
 class ProjectSchema(BaseModel):
     name: str
     description: str
