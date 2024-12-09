@@ -690,3 +690,91 @@ async def test_hard_delete_project_handles_s3_error(
     assert db_file is None
     db_project = session.get(Project, project.id)
     assert db_project is None
+
+
+@pytest.mark.asyncio
+async def test_download_file(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Create a test file in the database
+    file = File(  # type: ignore
+        project_id=project.id,
+        path='test/path/file.txt',
+        original_filename='test_file.txt',
+        size=1000,
+        mime_type='text/plain',
+    )
+    session.add(file)
+    session.commit()
+    session.refresh(file)
+
+    # Mock the get_download_url function
+    mock_url = 'https://example.com/download/test_file.txt'
+    with patch(
+        'app.routers.projects.get_download_url', return_value=mock_url
+    ) as mock_get_url:
+        response = client.get(
+            f'/organizations/{organization.id}/projects/{project.id}/files/{file.id}/download',
+            headers={'Authorization': f'Bearer {token}'},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == {'download_url': mock_url}
+        mock_get_url.assert_called_once_with(file.path, file.original_filename)
+
+
+@pytest.mark.asyncio
+async def test_download_nonexistent_file(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+):
+    nonexistent_file_id = uuid.uuid4()
+    response = client.get(
+        f'/organizations/{organization.id}/projects/{project.id}/files/{nonexistent_file_id}/download',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.json()['detail'] == 'File not found.'
+
+
+@pytest.mark.asyncio
+async def test_download_file_wrong_organization(
+    client: TestClient,
+    token: str,
+    other_user: User,
+    session: Session,
+):
+    # Create a project and file in a different organization
+    other_org = other_user.organizations[0]
+    project = Project(  # type: ignore
+        name='Other Project',
+        description='Another test project',
+        organization_id=other_org.id,
+        organization=other_org,
+    )
+    session.add(project)
+    session.commit()
+
+    file = File(  # type: ignore
+        project_id=project.id,
+        path='test/path/file.txt',
+        original_filename='test_file.txt',
+        size=1000,
+        mime_type='text/plain',
+    )
+    session.add(file)
+    session.commit()
+
+    response = client.get(
+        f'/organizations/{other_org.id}/projects/{project.id}/files/{file.id}/download',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND

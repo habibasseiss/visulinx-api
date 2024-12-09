@@ -20,7 +20,11 @@ from app.database import get_session
 from app.models import File, Organization, Project, User
 from app.schemas import ProjectList, ProjectPublic, ProjectSchema
 from app.security import get_current_user
-from app.services.upload_service import delete_file_from_s3, upload_file_to_s3
+from app.services.upload_service import (
+    delete_file_from_s3,
+    get_download_url,
+    upload_file_to_s3,
+)
 from app.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -259,9 +263,29 @@ async def delete_file(
 
     return Response(status_code=HTTPStatus.NO_CONTENT)
 
-    # Delete the database records
-    for db_file in db_files:
-        session.delete(db_file)
-    session.commit()
 
-    return Response(status_code=HTTPStatus.NO_CONTENT)
+@router.get('/{project_id}/files/{file_id}/download')
+async def download_file(
+    organization_id: UUID,
+    project_id: UUID,
+    file_id: UUID,
+    user: CurrentUser,
+    session: DbSession,
+) -> dict[str, str]:
+    _ = get_project(session, user, organization_id, project_id)
+
+    file = session.scalar(
+        select(File).where(
+            File.id == file_id,
+            File.project_id == project_id,
+        )
+    )
+    if not file:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail='File not found.',
+        )
+
+    download_url = await get_download_url(file.path, file.original_filename)
+
+    return {'download_url': download_url}
