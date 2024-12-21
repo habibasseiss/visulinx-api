@@ -51,6 +51,7 @@ async def upload_file_to_s3(project_id: UUID, file: UploadFile) -> FileSchema:
         mime_type=mime_type,
         original_filename=str(file.filename),
         contents=None,
+        processed_at=None,
     )
 
 

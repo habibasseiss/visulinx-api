@@ -63,15 +63,21 @@ def get_project(
     user: CurrentUser,
     organization_id: UUID,
     project_id: UUID,
+    ignore_deleted: bool = True,
 ) -> Project:
-    project = session.scalar(
-        select(Project).where(
-            Project.organization_id == organization_id,
-            Project.id == project_id,
-            Project.organization.has(Organization.users.contains(user)),
-            Project.deleted_at.is_(None),
-        )
+    query = select(Project).where(
+        Project.organization_id == organization_id,
+        Project.id == project_id,
+        Project.organization.has(Organization.users.contains(user)),
     )
+    project = session.scalar(query)
+
+    if ignore_deleted and project and project.deleted_at:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail='Project not found.',
+        )
+
     if not project:
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
@@ -161,7 +167,9 @@ async def hard_delete_project(
     session: DbSession,
     user: CurrentUser,
 ):
-    project = get_project(session, user, organization_id, project_id)
+    project = get_project(
+        session, user, organization_id, project_id, ignore_deleted=False
+    )
 
     # Delete files from S3
     for file in project.files:
@@ -226,7 +234,7 @@ async def upload(  # noqa: PLR0913, PLR0917
 
     # Schedule processing of each file in the background
     for result, download_url in zip(results, download_urls):
-        if result and result.id:
+        if result and result.id and result.mime_type == 'application/pdf':
             background_tasks.add_task(
                 process,
                 download_url,

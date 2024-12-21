@@ -3,8 +3,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from fastapi import HTTPException
-from sqlalchemy import Column, ForeignKey, Table, event, func
+from sqlalchemy import Column, ForeignKey, Table, Text, event, func
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship
 
 from app.services.upload_service import delete_file_from_s3
@@ -117,15 +116,10 @@ def delete_project_files_from_s3(mapper, connection, target: Project):
         loop = asyncio.new_event_loop()
         try:
             loop.run_until_complete(delete_file_from_s3(file.path))
-        except HTTPException as e:
-            # Log the error but don't stop the deletion process
-            logger.error(
-                f'Failed to delete file {file.path} from S3: {str(e)}'
-            )
         except Exception as e:
             # Log any other unexpected errors
             logger.error(
-                f'Unexpected error deleting file {file.path} from S3: {str(e)}'
+                f'Failed to delete file {file.path} from S3: {str(e)}'
             )
         finally:
             loop.close()
@@ -142,9 +136,17 @@ class File:
     size: Mapped[int] = mapped_column(init=True)
     mime_type: Mapped[str] = mapped_column(init=True)
     original_filename: Mapped[str] = mapped_column(init=True)
-    contents: Mapped[str | None] = mapped_column(init=False, nullable=True)
+    contents: Mapped[str | None] = mapped_column(
+        Text, init=False, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        init=False, server_default=func.now(), onupdate=func.now()
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        init=False, nullable=True
     )
     project_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey('projects.id'),

@@ -238,8 +238,8 @@ def test_upload_file(
     project: Project,
 ):
     # Simulate a file upload
-    file_content = b'Sample file content'
-    files = [('files', ('test.txt', file_content, 'text/plain'))]
+    file_content = b'%PDF-1.4 fake pdf content'
+    files = [('files', ('test.pdf', file_content, 'application/pdf'))]
 
     # Mock the upload_file_to_s3 function and prevent background tasks
     with (
@@ -248,11 +248,12 @@ def test_upload_file(
         patch('app.routers.projects.process'),
     ):
         mock_upload.return_value = FileSchema(
-            path='mocked/path/to/test.txt',
+            path='mocked/path/to/test.pdf',
             size=len(file_content),
-            mime_type='text/plain',
-            original_filename='test.txt',
+            mime_type='application/pdf',
+            original_filename='test.pdf',
             contents=None,
+            processed_at=None,
         )
 
         # Call the endpoint
@@ -268,14 +269,15 @@ def test_upload_file(
         assert isinstance(response_json, list)
         assert len(response_json) == 1
         file_response = response_json[0]
-        assert file_response['path'] == 'mocked/path/to/test.txt'
+        assert file_response['path'] == 'mocked/path/to/test.pdf'
         assert file_response['size'] == len(file_content)
 
         # Ensure only the upload mock was called
         mock_upload.assert_called_once()
 
 
-def test_upload_file_with_processing(
+@pytest.mark.asyncio
+async def test_upload_file_with_processing(
     client: TestClient,
     token: str,
     organization: Organization,
@@ -283,26 +285,35 @@ def test_upload_file_with_processing(
     session: Session,
 ):
     # Simulate a file upload
-    file_content = b'Sample file content'
-    files = [('files', ('test.txt', file_content, 'text/plain'))]
+    file_content = b'%PDF-1.4 fake pdf content'
+    files = [('files', ('test.pdf', file_content, 'application/pdf'))]
 
     # Mock the upload_file_to_s3 function and get_download_url
     with (
         patch('app.routers.projects.upload_file_to_s3') as mock_upload,
         patch('app.routers.projects.get_download_url') as mock_get_url,
-        patch('app.routers.projects.process') as mock_process,
+        patch('httpx.AsyncClient') as mock_client,
     ):
         # Setup mock for file upload
         mock_upload.return_value = FileSchema(
-            path='mocked/path/to/test.txt',
+            path='mocked/path/to/test.pdf',
             size=len(file_content),
-            mime_type='text/plain',
-            original_filename='test.txt',
+            mime_type='application/pdf',
+            original_filename='test.pdf',
             contents=None,
+            processed_at=None,
         )
 
         # Setup mock for download URL
-        mock_get_url.return_value = 'https://example.com/test.txt'
+        mock_get_url.return_value = 'https://example.com/test.pdf'
+
+        # Setup mock for HTTP client
+        mock_response = MagicMock()
+        mock_response.text = 'processed content'
+        mock_response.raise_for_status = lambda: None
+        mock_client.return_value.__aenter__.return_value.post.return_value = (
+            mock_response
+        )
 
         # Call the endpoint
         response = client.post(
@@ -317,24 +328,24 @@ def test_upload_file_with_processing(
         assert isinstance(response_json, list)
         assert len(response_json) == 1
         file_response = response_json[0]
-        assert file_response['path'] == 'mocked/path/to/test.txt'
+        assert file_response['path'] == 'mocked/path/to/test.pdf'
         assert file_response['size'] == len(file_content)
 
         # Verify file was created in database
         db_file = (
             session.query(File)
-            .filter_by(path='mocked/path/to/test.txt')
+            .filter_by(path='mocked/path/to/test.pdf')
             .first()
         )
         assert db_file is not None
-        assert db_file.original_filename == 'test.txt'
+        assert db_file.original_filename == 'test.pdf'
 
-        # Verify background task was scheduled
-        mock_process.assert_called_once_with(
-            'https://example.com/test.txt',
-            db_file.id,
-            session,
-        )
+        # Verify processing completed and database was updated
+        assert db_file.processed_at is not None
+        assert db_file.contents is not None
+
+        # Verify the HTTP request was made
+        mock_client.return_value.__aenter__.return_value.post.assert_called_once()
 
 
 def test_delete_file(

@@ -14,6 +14,7 @@ class FileSchema(BaseModel):
     size: int
     mime_type: str
     original_filename: str
+    processed_at: datetime | None
     contents: str | None
 
 
@@ -24,6 +25,8 @@ class FilePublic(BaseModel):
     mime_type: str
     original_filename: str
     created_at: datetime
+    updated_at: datetime
+    processed_at: datetime | None
     model_config = ConfigDict(from_attributes=True)
 
 

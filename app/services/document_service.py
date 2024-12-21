@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from uuid import UUID
 
 import httpx
@@ -31,4 +32,5 @@ async def process(document_url: str, file_id: UUID, session: Session):
         file_record = session.get(File, file_id)
         if file_record:
             file_record.contents = result_content
+            file_record.processed_at = datetime.now()
             session.commit()
