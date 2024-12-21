@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     HTTPException,
     Query,
@@ -18,8 +19,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.models import File, Organization, Project, User
-from app.schemas import ProjectList, ProjectPublic, ProjectSchema
+from app.schemas import FileSchema, ProjectList, ProjectPublic, ProjectSchema
 from app.security import get_current_user
+from app.services.document_service import process
 from app.services.upload_service import (
     delete_file_from_s3,
     get_download_url,
@@ -182,12 +184,13 @@ async def hard_delete_project(
 
 
 @router.post('/{project_id}/files', status_code=HTTPStatus.CREATED)
-async def upload(
+async def upload(  # noqa: PLR0913, PLR0917
     organization_id: UUID,
     project_id: UUID,
     user: CurrentUser,
     files: list[UploadFile],
     session: DbSession,
+    background_tasks: BackgroundTasks,
 ):
     # Verify project exists and user has access
     _ = get_project(session, user, organization_id, project_id)
@@ -195,6 +198,12 @@ async def upload(
     # Upload files to S3 in parallel
     upload_tasks = [upload_file_to_s3(project_id, file) for file in files]
     results = await asyncio.gather(*upload_tasks)
+
+    # Get download URLs for each file
+    download_urls = [
+        await get_download_url(result.path, result.original_filename)
+        for result in results
+    ]
 
     # Create file records in database
     db_files = []
@@ -214,6 +223,16 @@ async def upload(
     # Update results with database IDs
     for result, db_file in zip(results, db_files):
         result.id = db_file.id
+
+    # Schedule processing of each file in the background
+    for result, download_url in zip(results, download_urls):
+        if result and result.id:
+            background_tasks.add_task(
+                process,
+                download_url,
+                result.id,
+                session,
+            )
 
     return results
 
@@ -262,6 +281,31 @@ async def delete_file(
     session.commit()
 
     return Response(status_code=HTTPStatus.NO_CONTENT)
+
+
+@router.get('/{project_id}/files/{file_id}', response_model=FileSchema)
+async def read_file(
+    organization_id: UUID,
+    project_id: UUID,
+    file_id: UUID,
+    user: CurrentUser,
+    session: DbSession,
+):
+    _ = get_project(session, user, organization_id, project_id)
+
+    file = session.scalar(
+        select(File).where(
+            File.id == file_id,
+            File.project_id == project_id,
+        )
+    )
+    if not file:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail='File not found.',
+        )
+
+    return file
 
 
 @router.get('/{project_id}/files/{file_id}/download')

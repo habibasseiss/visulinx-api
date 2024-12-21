@@ -35,7 +35,6 @@ async def test_upload_file_to_s3():
                 'Bucket': settings.BUCKET_NAME,
                 'ContentType': 'text/plain',
                 'Key': f'projects/{project_id}/{file_id}.txt',
-                'Metadata': {'filename': 'test.txt'},
             },
         )
 

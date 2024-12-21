@@ -241,13 +241,18 @@ def test_upload_file(
     file_content = b'Sample file content'
     files = [('files', ('test.txt', file_content, 'text/plain'))]
 
-    # Mock the upload_file_to_s3 function
-    with patch('app.routers.projects.upload_file_to_s3') as mock_upload:
+    # Mock the upload_file_to_s3 function and prevent background tasks
+    with (
+        patch('app.routers.projects.upload_file_to_s3') as mock_upload,
+        patch('app.routers.projects.get_download_url'),
+        patch('app.routers.projects.process'),
+    ):
         mock_upload.return_value = FileSchema(
             path='mocked/path/to/test.txt',
             size=len(file_content),
             mime_type='text/plain',
             original_filename='test.txt',
+            contents=None,
         )
 
         # Call the endpoint
@@ -266,8 +271,70 @@ def test_upload_file(
         assert file_response['path'] == 'mocked/path/to/test.txt'
         assert file_response['size'] == len(file_content)
 
-        # Ensure the mock was called once with expected arguments
+        # Ensure only the upload mock was called
         mock_upload.assert_called_once()
+
+
+def test_upload_file_with_processing(
+    client: TestClient,
+    token: str,
+    organization: Organization,
+    project: Project,
+    session: Session,
+):
+    # Simulate a file upload
+    file_content = b'Sample file content'
+    files = [('files', ('test.txt', file_content, 'text/plain'))]
+
+    # Mock the upload_file_to_s3 function and get_download_url
+    with (
+        patch('app.routers.projects.upload_file_to_s3') as mock_upload,
+        patch('app.routers.projects.get_download_url') as mock_get_url,
+        patch('app.routers.projects.process') as mock_process,
+    ):
+        # Setup mock for file upload
+        mock_upload.return_value = FileSchema(
+            path='mocked/path/to/test.txt',
+            size=len(file_content),
+            mime_type='text/plain',
+            original_filename='test.txt',
+            contents=None,
+        )
+
+        # Setup mock for download URL
+        mock_get_url.return_value = 'https://example.com/test.txt'
+
+        # Call the endpoint
+        response = client.post(
+            f'/organizations/{organization.id}/projects/{project.id}/files',
+            headers={'Authorization': f'Bearer {token}'},
+            files=files,
+        )
+
+        # Assertions for response
+        assert response.status_code == HTTPStatus.CREATED
+        response_json = response.json()
+        assert isinstance(response_json, list)
+        assert len(response_json) == 1
+        file_response = response_json[0]
+        assert file_response['path'] == 'mocked/path/to/test.txt'
+        assert file_response['size'] == len(file_content)
+
+        # Verify file was created in database
+        db_file = (
+            session.query(File)
+            .filter_by(path='mocked/path/to/test.txt')
+            .first()
+        )
+        assert db_file is not None
+        assert db_file.original_filename == 'test.txt'
+
+        # Verify background task was scheduled
+        mock_process.assert_called_once_with(
+            'https://example.com/test.txt',
+            db_file.id,
+            session,
+        )
 
 
 def test_delete_file(
@@ -386,8 +453,9 @@ def test_delete_file_wrong_organization(
 
     # Call the endpoint
     response = client.delete(
-        f'/organizations/{organization.id}/projects/{project.id}/files/{db_file.id}',
+        f'/organizations/{organization.id}/projects/{project.id}/files',
         headers={'Authorization': f'Bearer {token}'},
+        params={'ids[]': str(db_file.id)},
     )
 
     # Should fail with NOT_FOUND, user doesn't have access to the organization

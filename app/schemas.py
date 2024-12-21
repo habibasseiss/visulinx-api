@@ -14,6 +14,7 @@ class FileSchema(BaseModel):
     size: int
     mime_type: str
     original_filename: str
+    contents: str | None
 
 
 class FilePublic(BaseModel):

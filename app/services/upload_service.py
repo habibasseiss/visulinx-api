@@ -37,9 +37,6 @@ async def upload_file_to_s3(project_id: UUID, file: UploadFile) -> FileSchema:
         Bucket=settings.BUCKET_NAME,
         Key=key,
         ContentType=mime_type,
-        Metadata={
-            'filename': str(file.filename),
-        },
     )
 
     if s3response['ResponseMetadata']['HTTPStatusCode'] != HTTPStatus.OK:
@@ -53,6 +50,7 @@ async def upload_file_to_s3(project_id: UUID, file: UploadFile) -> FileSchema:
         size=filesize,
         mime_type=mime_type,
         original_filename=str(file.filename),
+        contents=None,
     )
 
 

@@ -142,6 +142,7 @@ class File:
     size: Mapped[int] = mapped_column(init=True)
     mime_type: Mapped[str] = mapped_column(init=True)
     original_filename: Mapped[str] = mapped_column(init=True)
+    contents: Mapped[str | None] = mapped_column(init=False, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )
