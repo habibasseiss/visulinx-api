@@ -111,18 +111,29 @@ class Project:
 # Set up event listener for Project deletion
 @event.listens_for(Project, 'before_delete')
 def delete_project_files_from_s3(mapper, connection, target: Project):
-    # We need to run the async function in a new event loop
-    for file in target.files:
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(delete_file_from_s3(file.path))
-        except Exception as e:
-            # Log any other unexpected errors
-            logger.error(
-                f'Failed to delete file {file.path} from S3: {str(e)}'
-            )
-        finally:
-            loop.close()
+    # Create a coroutine that deletes all files
+    async def delete_all_files():
+        for file in target.files:
+            try:
+                await delete_file_from_s3(file.path)
+            except Exception as e:
+                # Log any other unexpected errors
+                logger.error(
+                    f'Failed to delete file {file.path} from S3: {str(e)}'
+                )
+
+    try:
+        # Try to get the current event loop
+        loop = asyncio.get_event_loop()
+
+        # If we're already in an event loop, run the coroutine directly
+        if loop.is_running():
+            loop.create_task(delete_all_files())
+        else:
+            # If we're not in an event loop, run it to completion
+            loop.run_until_complete(delete_all_files())
+    except Exception as e:
+        logger.error(f'Failed to delete files from S3: {str(e)}')
 
 
 @table_registry.mapped_as_dataclass
