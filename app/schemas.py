@@ -83,6 +83,23 @@ class UserList(BaseModel):
     users: list[UserPublic]
 
 
+class PreferenceSchema(BaseModel):
+    key: str
+    value: str
+
+
+class PreferencesPublic(BaseModel):
+    key: str
+    value: str
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PreferencesList(BaseModel):
+    preferences: list[PreferenceSchema]
+
+
 class Token(BaseModel):
     access_token: str
     refresh_token: str

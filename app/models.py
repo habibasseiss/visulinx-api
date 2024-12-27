@@ -167,3 +167,17 @@ class File:
         init=False,
         back_populates='files',
     )
+
+
+@table_registry.mapped_as_dataclass
+class Preference:
+    __tablename__ = 'preferences'
+
+    key: Mapped[str] = mapped_column(init=True, primary_key=True)
+    value: Mapped[str] = mapped_column(init=True)
+    created_at: Mapped[datetime] = mapped_column(
+        init=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        init=False, server_default=func.now(), onupdate=func.now()
+    )
