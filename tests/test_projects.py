@@ -245,7 +245,7 @@ def test_upload_file(
     with (
         patch('app.routers.projects.upload_file_to_s3') as mock_upload,
         patch('app.routers.projects.get_download_url'),
-        patch('app.routers.projects.process'),
+        patch('app.routers.projects.document_service.extract_text'),
     ):
         mock_upload.return_value = FileSchema(
             path='mocked/path/to/test.pdf',
