@@ -77,7 +77,9 @@ async def delete_file_from_s3(file_path: str) -> None:
         )
 
 
-async def get_download_url(file_path: str, original_filename: str) -> str:
+async def get_download_url(
+    file_path: str, original_filename: str | None = None
+) -> str:
     if not file_path:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
@@ -85,14 +87,18 @@ async def get_download_url(file_path: str, original_filename: str) -> str:
         )
 
     s3: S3Client = boto3.client('s3')
+    params = {
+        'Bucket': settings.BUCKET_NAME,
+        'Key': file_path,
+    }
+    if original_filename:
+        params['ResponseContentDisposition'] = (
+            f'attachment; filename="{original_filename}"'  # noqa: E501
+        )
     try:
         url = s3.generate_presigned_url(
             'get_object',
-            Params={
-                'Bucket': settings.BUCKET_NAME,
-                'Key': file_path,
-                'ResponseContentDisposition': f'attachment; filename="{original_filename}"',  # noqa: E501
-            },
+            Params=params,
             ExpiresIn=60,  # URL expires in 60 seconds
         )
         return url

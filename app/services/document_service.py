@@ -11,7 +11,7 @@ from app.models import File
 load_dotenv()
 
 
-async def process(document_url: str, file_id: UUID, session: Session):
+async def extract_text(document_url: str, file_id: UUID, session: Session):
     """
     Process the uploaded file by making an HTTP POST request and update the
     contents field.

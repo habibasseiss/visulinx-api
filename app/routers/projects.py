@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from datetime import datetime
 from http import HTTPStatus
@@ -14,25 +15,27 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_session
-from app.models import File, Organization, Project, User
-from app.schemas import FileSchema, ProjectList, ProjectPublic, ProjectSchema
+from app.models import File, Organization, Preference, Project, User
+from app.schemas import (
+    FileSchema,
+    ProjectList,
+    ProjectPublic,
+    ProjectPublicList,
+    ProjectSchema,
+)
 from app.security import get_current_user
-from app.services.document_service import process
+from app.services import ai_service, document_service
 from app.services.upload_service import (
     delete_file_from_s3,
     get_download_url,
     upload_file_to_s3,
 )
-from app.settings import Settings
 
 logger = logging.getLogger(__name__)
-
-settings = Settings.model_validate({})
-
 
 router = APIRouter(
     prefix='/organizations/{organization_id}/projects', tags=['projects']
@@ -97,7 +100,25 @@ def list_organization_projects(
             Project.deleted_at.is_(None),
         )
     ).all()
-    return {'projects': projects}
+
+    project_list = []
+    for project in projects:
+        file_count = session.scalar(
+            select(func.count()).where(File.project_id == project.id)
+        )
+        if project.organization_id:
+            project_list.append(
+                ProjectPublicList(
+                    id=project.id,
+                    name=project.name,
+                    description=project.description,
+                    organization_id=project.organization_id,
+                    created_at=project.created_at,
+                    file_count=file_count or 0,
+                )
+            )
+
+    return {'projects': project_list}
 
 
 @router.post('/', response_model=ProjectPublic, status_code=HTTPStatus.CREATED)
@@ -236,7 +257,7 @@ async def upload(  # noqa: PLR0913, PLR0917
     for result, download_url in zip(results, download_urls):
         if result and result.id and result.mime_type == 'application/pdf':
             background_tasks.add_task(
-                process,
+                document_service.extract_text,
                 download_url,
                 result.id,
                 session,
@@ -341,3 +362,85 @@ async def download_file(
     download_url = await get_download_url(file.path, file.original_filename)
 
     return {'download_url': download_url}
+
+
+@router.get(
+    '/{project_id}/files/{file_id}/extract_bounding_boxes',
+    response_model=ai_service.DetectedObjectListSchema,
+)
+async def extract_bounding_boxes(
+    organization_id: UUID,
+    project_id: UUID,
+    file_id: UUID,
+    user: CurrentUser,
+    session: DbSession,
+):
+    _ = get_project(session, user, organization_id, project_id)
+
+    preferences = {
+        pref.key: pref.value
+        for pref in session.scalars(
+            select(Preference).where(
+                Preference.key.in_(['system_prompt', 'assistant_prompt'])
+            )
+        ).all()
+    }
+
+    image_file = session.scalar(
+        select(File).where(
+            File.id == file_id,
+            File.project_id == project_id,
+        )
+    )
+    if not image_file:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail='File not found.',
+        )
+
+    if not image_file.mime_type.startswith('image'):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail='File is not an image.',
+        )
+
+    download_url = await get_download_url(
+        image_file.path, image_file.original_filename
+    )
+
+    documents = session.scalars(
+        select(File).where(
+            File.project_id == project_id,
+            File.mime_type == 'application/pdf',
+            File.processed_at.isnot(None),
+        )
+    ).all()
+
+    if not documents:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail='No PDF documents found in project.',
+        )
+
+    document_contents = {
+        document.original_filename: document.contents
+        for document in documents
+        if document.contents is not None
+    }
+
+    ai = ai_service.GeminiAiService()
+
+    bounding_boxes = ai.extract_bounding_boxes(
+        image_url=download_url,
+        document_contents=document_contents,
+        system_prompt=preferences['system_prompt'],
+        assistant_prompt=preferences['assistant_prompt'],
+    )
+
+    # image_file.contents = str(bounding_boxes)
+    image_file.contents = json.dumps(bounding_boxes)
+    image_file.processed_at = datetime.now()
+    session.commit()
+    session.refresh(image_file)
+
+    return bounding_boxes

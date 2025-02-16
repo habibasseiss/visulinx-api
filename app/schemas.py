@@ -24,6 +24,7 @@ class FilePublic(BaseModel):
     size: int
     mime_type: str
     original_filename: str
+    contents: str | None
     created_at: datetime
     updated_at: datetime
     processed_at: datetime | None
@@ -49,8 +50,18 @@ class ProjectPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProjectPublicList(BaseModel):
+    id: UUID
+    name: str
+    description: str
+    organization_id: UUID
+    created_at: datetime
+    file_count: int
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ProjectList(BaseModel):
-    projects: list[ProjectPublic]
+    projects: list[ProjectPublicList]
 
 
 class OrganizationBasic(BaseModel):
