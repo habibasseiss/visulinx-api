@@ -1,6 +1,13 @@
 # VisuLinx API
 
-A robust FastAPI-based backend service for managing organizations, projects, and file processing with secure authentication.
+A FastAPI-based application designed for understanding documents and images, using multimodal LLMs to detect and locate objects within these images through precise bounding box detection.
+
+## 🎯 Core Purpose
+
+- **Document Processing**: Extract and manage images from various document formats
+- **AI-Powered Analysis**: Leverage multiple AI providers (Gemini, Together AI, Hyperbolic) for accurate object detection
+- **Multi-Organization Support**: Organize and manage documents across different organizations and projects
+- **Secure Access**: Role-based access control with organization-level permissions
 
 ## 🚀 Features
 
@@ -128,3 +135,5 @@ uv run alembic revision --autogenerate -m "add ... table"
 
 ```sh
 python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+```
