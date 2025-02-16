@@ -428,7 +428,9 @@ async def extract_bounding_boxes(
         if document.contents is not None
     }
 
-    bounding_boxes = ai_service.extract_bounding_boxes(
+    ai = ai_service.GeminiAiService()
+
+    bounding_boxes = ai.extract_bounding_boxes(
         image_url=download_url,
         document_contents=document_contents,
         system_prompt=preferences['system_prompt'],
